@@ -5,12 +5,86 @@ const qrcode = require('qrcode-terminal');
 
 dotenv.config();
 
+// -------------------- Gemini AI (via REST API) --------------------
+
+async function generateAIReply(userMessage) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+        console.error('❌ GEMINI_API_KEY is missing in .env');
+        return "Server error: Gemini API key is not configured.";
+    }
+
+    const model = process.env.GEMINI_MODEL;
+
+    try {
+        const url =
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+        const body = {
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
+                        {
+                            text:
+                                "You are a helpful, friendly WhatsApp customer support assistant. " +
+                                "Reply clearly and concisely.\n\n" +
+                                "User message: " + userMessage
+                        }
+                    ]
+                }
+            ]
+        };
+
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+            const errText = await res.text();
+            console.error('❌ Gemini HTTP error:', res.status, errText);
+            return "Sorry, I'm having trouble talking to the AI service right now.";
+        }
+
+        const data = await res.json();
+
+        const text =
+            data?.candidates?.[0]?.content?.parts
+                ?.map((p) => p.text || '')
+                .join(' ')
+                .trim() || null;
+
+        if (!text) {
+            console.error('⚠️ Gemini response had no text:', JSON.stringify(data, null, 2));
+            return "Sorry, I couldn't figure out a good reply.";
+        }
+
+        return text;
+    } catch (error) {
+        console.error('❌ Error calling Gemini:', error);
+        return "Sorry, I'm having some technical issues responding right now.";
+    }
+}
+
+// -------------------- Express setup --------------------
+
 const app = express();
 app.use(express.json());
 
-// --- WhatsApp client setup ---
+app.get('/', (req, res) => {
+    res.send('WhatsApp AI Bot (Gemini) backend is running ✅');
+});
+
+const PORT = process.env.PORT || 4000;
+
+// -------------------- WhatsApp client setup --------------------
+
 const waClient = new Client({
-    authStrategy: new LocalAuth(), // saves session so you don't scan every time
+    authStrategy: new LocalAuth(), // keeps session, so you don't scan every time
     puppeteer: {
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -38,29 +112,36 @@ waClient.on('disconnected', (reason) => {
     console.log('⚠️ WhatsApp client disconnected:', reason);
 });
 
-// Simple echo / test bot
+// -------------------- Message handler (AI replies) --------------------
+
 waClient.on('message', async (msg) => {
-    console.log(`💬 From ${msg.from}: ${msg.body}`);
+    try {
+        console.log(`💬 From ${msg.from}: ${msg.body}`);
 
-    // Test command
-    if (msg.body.toLowerCase() === 'ping') {
-        await msg.reply('pong 🏓');
-        return;
+        const text = msg.body?.trim();
+        if (!text) return;
+
+        // Simple health-check command
+        if (text.toLowerCase() === 'ping') {
+            await msg.reply('pong 🏓 (Gemini AI is online)');
+            return;
+        }
+
+        // Generate AI reply using Gemini
+        const aiReply = await generateAIReply(text);
+        await msg.reply(aiReply);
+    } catch (err) {
+        console.error('❌ Error handling message:', err);
+        try {
+            await msg.reply("Sorry, something went wrong on my side.");
+        } catch (_) { }
     }
-
-    // Default echo
-    await msg.reply(`You said: ${msg.body}`);
 });
 
-// Initialize WhatsApp
+// -------------------- Start everything --------------------
+
 waClient.initialize();
 
-// --- Express server ---
-app.get('/', (req, res) => {
-    res.send('WhatsApp AI Bot Backend (JS version) is running ✅');
-});
-
-const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
     console.log(`🚀 Server listening on http://localhost:${PORT}`);
 });
