@@ -1,0 +1,72 @@
+{
+    "chunks": [
+        {
+            "id": "sample-1",
+            "title": "Business Hours",
+            "text": "Our business is open from Monday to Friday, 9:00 AM to 5:00 PM. We are closed on weekends and public holidays.",
+            "embedding": [
+                0.12,
+                0.03,
+                -0.09,
+                0.04,
+                0.11,
+                0.07,
+                -0.05,
+                0.02,
+                0.08,
+                -0.01
+            ]
+        },
+        {
+            "id": "sample-2",
+            "title": "Refund Policy",
+            "text": "We offer a 30-day refund policy for all unused and undamaged products. Customers must provide proof of purchase to initiate a refund request.",
+            "embedding": [
+                0.04,
+                0.10,
+                0.02,
+                -0.07,
+                0.03,
+                0.11,
+                0.06,
+                -0.02,
+                0.09,
+                0.01
+            ]
+        },
+        {
+            "id": "sample-3",
+            "title": "Shipping Information",
+            "text": "All orders are processed within 24 hours and delivered within 3 to 5 business days. Express shipping options are available at checkout for an additional fee.",
+            "embedding": [
+                -0.03,
+                0.09,
+                0.04,
+                0.01,
+                0.10,
+                -0.05,
+                0.07,
+                0.03,
+                0.02,
+                0.11
+            ]
+        },
+        {
+            "id": "sample-4",
+            "title": "Company Overview",
+            "text": "We are a customer-focused technology company providing high-quality digital solutions, including AI-powered chatbots, automation systems, and cloud services.",
+            "embedding": [
+                0.06,
+                -0.01,
+                0.12,
+                0.04,
+                0.03,
+                0.08,
+                -0.02,
+                0.05,
+                0.10,
+                0.00
+            ]
+        }
+    ]
+}
