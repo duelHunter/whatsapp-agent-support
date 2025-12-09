@@ -38,11 +38,10 @@ async function generateAIReply({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: systemInstruction }],
+          },
           contents: [
-            {
-              role: "system",
-              parts: [{ text: systemInstruction }],
-            },
             {
               role: "user",
               parts: [{ text: userPrompt }],

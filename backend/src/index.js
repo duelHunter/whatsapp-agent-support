@@ -8,8 +8,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const cors = require('cors');
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
-
+const { PDFParse } = require('pdf-parse');
 
 dotenv.config();
 
@@ -82,8 +81,9 @@ app.post('/kb/upload-pdf', upload.single('file'), async (req, res) => {
         title,
       });
   
-      // Extract text from PDF buffer
-      const pdfData = await pdfParse(req.file.buffer);
+      // Extract text from PDF buffer using PDFParse class
+      const parser = new PDFParse({ data: req.file.buffer });
+      const pdfData = await parser.getText();
       const text = (pdfData.text || '').trim();
   
       if (!text) {
@@ -97,7 +97,7 @@ app.post('/kb/upload-pdf', upload.single('file'), async (req, res) => {
         ok: true,
         title,
         addedChunks,
-        pages: pdfData.numpages,
+        pages: pdfData.numpages || pdfData.numPages || null,
       });
     } catch (err) {
       console.error('Error in /kb/upload-pdf:', err);
