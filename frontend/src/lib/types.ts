@@ -8,3 +8,11 @@ export interface KbAddTextResponse {
   addedChunks: number;
 }
 
+export interface KbUploadPdfResponse {
+  ok: boolean;
+  title: string;
+  addedChunks: number;
+  pages: number | null;
+  error?: string;
+}
+

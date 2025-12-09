@@ -1,8 +1,8 @@
 {
   "chunks": [
     {
-      "id": "1765273931400-xenyu051",
-      "title": "Business Master Document",
+      "id": "1765277951136-7j23fkol",
+      "title": "business_kb_sample",
       "text": "Business Knowledge Base - WhatsApp AI Support System\nCompany Overview\nOur company specializes in AI-powered automation, customer support chatbots, WhatsApp\nautomation, and cloud integration solutions. We help small and medium businesses streamline customer communication, reduce workload, and\nimprove response times using AI-driven workflows. Products & Services\n1. AI-Powered WhatsApp Chatbot\n• Automated replies for FAQs, orders, bookings, and support. • Context-aware conversation handling. • Integrated with internal business documents for accurate responses. 2. Customer Support Automation Platform\n• Centralized dashboard for viewing customer interactions. • Chat analytics: message volume, response time, customer sentiment. • Multi-agent handover support. 3.",
       "embedding": [
         -0.020099254,
@@ -776,8 +776,8 @@
       ]
     },
     {
-      "id": "1765273931709-mp1aynlp",
-      "title": "Business Master Document",
+      "id": "1765277951428-57yjhyi4",
+      "title": "business_kb_sample",
       "text": "Business Knowledge Base Engine\n• Upload PDFs, text files, or web content. • AI processes content and provides factual responses. • Powered by advanced embeddings and semantic search. Service Packages\nBasic Package\n• Suitable for individuals and freelancers. • Handles up to 500 WhatsApp inquiries monthly. • Email support included. • Does not include analytics or customization. -- 1 of 3 --\n\nStandard Package\n• Ideal for small and medium businesses. • Up to 5,000 inquiries monthly. • Access to admin dashboard and analytics. • Limited customization options. • Priority email support. Premium Package\n• Recommended for enterprises and high-volume users. • Unlimited inquiries. • Full customization + API access. • Dedicated account manager. • 24/7 priority support. • SLA-backed uptime guarantee.",
       "embedding": [
         -0.007387802,
@@ -1551,8 +1551,8 @@
       ]
     },
     {
-      "id": "1765273931994-3ni6agwc",
-      "title": "Business Master Document",
+      "id": "1765277951728-g3c5wtpp",
+      "title": "business_kb_sample",
       "text": "Operating Hours\n• Monday–Friday: 9:00 AM – 6:00 PM\n• Saturday: 9:00 AM – 1:00 PM\n• Sunday & Public Holidays: Closed\nRefund & Cancellation Policy\n• Customers may request a refund within 30 days of purchase. • Refunds are applicable only for unused service credits. • Monthly subscriptions can be canceled anytime. • Annual plans receive prorated refunds. Shipping & Delivery (For Hardware Add-ons)\n• Orders process within 24–48 hours. -- 2 of 3 --\n\n• Delivery within 3–5 business days. • Express delivery options available. Support Contact\n• Email: support@yourcompany.com\n• Hotline: +94 76 123 4567\n• WhatsApp Support: +94 71 987 6543\nThis document is intended for AI training and as a knowledge reference source for the WhatsApp AI\nchatbot. -- 3 of 3 --",
       "embedding": [
         0.063909575,

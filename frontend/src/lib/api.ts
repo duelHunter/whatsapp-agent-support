@@ -1,4 +1,4 @@
-const API_BASE =
+export const API_BASE =
   (process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined) ??
   "http://localhost:4000";
 
@@ -29,6 +29,14 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+  return handleResponse<T>(res);
+}
+
+export async function apiPostForm<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    body: formData,
   });
   return handleResponse<T>(res);
 }
