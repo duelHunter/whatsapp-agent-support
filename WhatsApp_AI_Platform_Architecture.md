@@ -37,6 +37,8 @@ The system is composed of four primary layers:
 
 
 Here is the sequence diagram,
+
+```
 User        WhatsApp      Backend        KB          Gemini
  |             |              |            |             |
  |--Message--->|              |            |             |
@@ -47,7 +49,7 @@ User        WhatsApp      Backend        KB          Gemini
  |             |              |<--AI Reply---------------|
  |             |<--Reply------|            |             |
  |<--Message---|              |            |             |
-
+```
 
 Each layer is loosely coupled and independently scalable.
 
