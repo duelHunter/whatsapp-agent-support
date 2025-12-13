@@ -18,13 +18,13 @@ The system is composed of four primary layers:
 ```
 
 ┌─────────────────────────────┐
-│        Web Dashboard         │
-│   (Next.js + TypeScript)     │
+│        Web Dashboard        │
+│   (Next.js + TypeScript)    │
 └─────────────▲───────────────┘
               │ Secure API (JWT)
 ┌─────────────┴───────────────┐
-│     Backend API Server       │
-│   (Node.js + Express)        │
+│     Backend API Server      │
+│   (Node.js + Express)       │
 └─────────────▲───────────────┘
               │
 ┌─────────────┴───────────────┐
