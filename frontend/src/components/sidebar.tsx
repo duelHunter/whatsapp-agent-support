@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "./theme-toggle";
+import { supabaseClient } from "@/lib/supabaseClient";
 
 type NavItem = {
   label: string;
@@ -41,6 +42,16 @@ function NavLink({ item }: { item: NavItem }) {
 }
 
 export function Sidebar() {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabaseClient.auth.signOut();
+    // Clear the cookie
+    document.cookie = 'sb-access-token=; path=/; max-age=0';
+    router.push('/login');
+    router.refresh();
+  };
+
   return (
     <aside className="fixed inset-y-0 left-0 w-64 border-r border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900">
       <div className="flex h-full flex-col">
@@ -69,6 +80,7 @@ export function Sidebar() {
             <ThemeToggle />
             <button
               type="button"
+              onClick={handleLogout}
               className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
             >
               Logout
