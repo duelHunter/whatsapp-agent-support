@@ -132,15 +132,8 @@ const PORT = process.env.PORT || 4000;
 // HTTP server (needed for socket.io)
 const server = http.createServer(app);
 
+// Initialize socket.io (creates Server internally and sets up event handlers)
 initSocket(server, process.env.CORS_ORIGIN?.split(",").map(s => s.trim()) || "*");
-
-// -------------------- Socket.io setup --------------------
-const io = new Server(server, {
-    cors: {
-      origin: process.env.CORS_ORIGIN?.split(",").map(s => s.trim()) || "*",
-      methods: ["GET", "POST"]
-    }
-  });
 
 // -------------------- WhatsApp client setup --------------------
 
@@ -152,14 +145,14 @@ const waClient = new Client({
     }
 });
 
-waClient.on('qr', (qr) => {
+waClient.on('qr', async (qr) => {
     console.log('📲 Scan this QR code with your WhatsApp:');
     // print the qr code to console
     qrcode.generate(qr, { small: true });
 
-    // convert to image for dashboard
-    const qrDataUrl = QRCode.toDataURL(qr, { margin: 1, scale: 6 });
-    console.log('QR code image URL:', qrDataUrl);
+    // convert to image for dashboard (await the Promise)
+    const qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, scale: 6 });
+    console.log('QR code image URL generated');
     setWaState({ connected: false, qrDataUrl, lastError: null });
 });
 
@@ -217,6 +210,7 @@ waClient.on('message', async (msg) => {
 
 waClient.initialize();
 
-app.listen(PORT, () => {
+// Use server.listen() instead of app.listen() to ensure socket.io and Express share the same HTTP server
+server.listen(PORT, () => {
     console.log(`🚀 Server listening on http://localhost:${PORT}`);
 });
