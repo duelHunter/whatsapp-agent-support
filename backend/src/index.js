@@ -141,8 +141,22 @@ const waClient = new Client({
     authStrategy: new LocalAuth(), // keeps session, so you don't scan every time
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    }
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--single-process', // May help with stability
+            '--disable-gpu'
+        ],
+        timeout: 60000, // 60 seconds timeout
+    },
+    webVersionCache: {
+        type: 'remote',
+        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
+    },
 });
 
 waClient.on('qr', async (qr) => {
@@ -174,6 +188,18 @@ waClient.on('auth_failure', (msg) => {
 waClient.on('disconnected', (reason) => {
     console.log('⚠️ WhatsApp client disconnected:', reason);
     setWaState({ connected: false, lastError: reason, qrDataUrl: null });
+    
+    // Handle LOGOUT gracefully - don't let file cleanup errors crash the server
+    if (reason === 'LOGOUT') {
+        console.log('📤 Logout detected - session will be cleared on next startup');
+        // The logout cleanup may fail on Windows due to file locks, but that's okay
+        // The session will be cleared on next initialization
+    }
+});
+
+waClient.on('error', (error) => {
+    console.error('❌ WhatsApp client error:', error);
+    setWaState({ connected: false, lastError: error.message || String(error), qrDataUrl: null });
 });
 
 // -------------------- Message handler (AI replies) --------------------

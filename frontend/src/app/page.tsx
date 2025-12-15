@@ -252,10 +252,10 @@ export default function Home() {
             </ul>
             <p className="mt-4 text-xs text-slate-500">
               Want something prioritized? Add an issue or ping in chat.
-            </p>
-          </div>
+          </p>
+        </div>
         </section>
-      </div>
+        </div>
     </div>
   );
 }
