@@ -3,17 +3,15 @@ const { searchKB } = require('./rag');
 const { generateAIReply } = require('./gemini');
 const requireAuth = require('./middleware/requireAuth');
 const requireRole = require('./middleware/requireRole');
-const { initSocket, setWaState, getWaState } = require('../socketService');
+const { initSocket, setWaState, getWaState } = require('../services/socketService');
+const waService = require('../services/waService');
 
 const express = require('express');
 const dotenv = require('dotenv');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode-terminal');
 const cors = require('cors');
 const multer = require('multer');
 const { PDFParse } = require('pdf-parse');
 const http = require('http');
-const QRCode = require('qrcode');
 
 dotenv.config();
 
@@ -135,106 +133,32 @@ const server = http.createServer(app);
 // Initialize socket.io (creates Server internally and sets up event handlers)
 initSocket(server, process.env.CORS_ORIGIN?.split(",").map(s => s.trim()) || "*");
 
-// -------------------- WhatsApp client setup --------------------
+// -------------------- WhatsApp service setup --------------------
 
-const waClient = new Client({
-    authStrategy: new LocalAuth(), // keeps session, so you don't scan every time
-    puppeteer: {
-        headless: true,
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--single-process', // May help with stability
-            '--disable-gpu'
-        ],
-        timeout: 60000, // 60 seconds timeout
-    },
-    webVersionCache: {
-        type: 'remote',
-        remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
-    },
-});
-
-waClient.on('qr', async (qr) => {
-    console.log('📲 Scan this QR code with your WhatsApp:');
-    // print the qr code to console
-    qrcode.generate(qr, { small: true });
-
-    // convert to image for dashboard (await the Promise)
-    const qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, scale: 6 });
-    console.log('QR code image URL generated');
-    setWaState({ connected: false, qrDataUrl, lastError: null });
-});
-
-waClient.on('ready', () => {
-    console.log('✅ WhatsApp client is ready');
-    setWaState({ connected: true, qrDataUrl: null, lastError: null });
-});
-
-waClient.on('authenticated', () => {
-    console.log('🔐 WhatsApp authenticated');
-
-});
-
-waClient.on('auth_failure', (msg) => {
-    console.error('❌ Auth failure:', msg);
-    setWaState({ connected: false, lastError: msg });
-});
-
-waClient.on('disconnected', (reason) => {
-    console.log('⚠️ WhatsApp client disconnected:', reason);
-    setWaState({ connected: false, lastError: reason, qrDataUrl: null });
-    
-    // Handle LOGOUT gracefully - don't let file cleanup errors crash the server
-    if (reason === 'LOGOUT') {
-        console.log('📤 Logout detected - session will be cleared on next startup');
-        // The logout cleanup may fail on Windows due to file locks, but that's okay
-        // The session will be cleared on next initialization
-    }
-});
-
-waClient.on('error', (error) => {
-    console.error('❌ WhatsApp client error:', error);
-    setWaState({ connected: false, lastError: error.message || String(error), qrDataUrl: null });
-});
-
-// -------------------- Message handler (AI replies) --------------------
-
-waClient.on('message', async (msg) => {
-    try {
-        console.log(`💬 From ${msg.from}: ${msg.body}`);
-
-        const text = msg.body?.trim();
-        if (!text) return;
-
-        // Simple health-check command
-        if (text.toLowerCase() === 'ping') {
-            await msg.reply('pong 🏓 (Gemini AI is online)');
-            return;
-        }
-
-        // Generate AI reply using Gemini
-        const kbMatches = await searchKB(text, { topK: 3 });
-        const aiReply = await generateAIReply({
-            userMessage: text,
-            kbMatches,
-        });
-        await msg.reply(aiReply);
-    } catch (err) {
-        console.error('❌ Error handling message:', err);
-        try {
-            await msg.reply("Sorry, something went wrong on my side.");
-        } catch (_) { }
-    }
-});
+// Initialize WhatsApp service with dependencies
+waService.init(setWaState, searchKB, generateAIReply);
 
 // -------------------- Start everything --------------------
 
-waClient.initialize();
+// Handle uncaught errors from WhatsApp client (e.g., file lock errors on Windows during logout)
+process.on('uncaughtException', (error) => {
+    // Catch EBUSY errors for both Cookies and Cookies-journal files (Windows file lock issue)
+    if (error.message && 
+        error.message.includes('EBUSY') && 
+        (error.message.includes('Cookies-journal') || error.message.includes('Cookies') || error.message.includes('.wwebjs_auth'))) {
+        console.warn('⚠️ File lock error during logout cleanup (Windows issue) - ignoring:', error.message);
+        // This is a known Windows issue where files are locked during cleanup
+        // The session will be cleared on next startup, so we can safely ignore this
+        return;
+    }
+    // Re-throw other uncaught exceptions
+    throw error;
+});
+
+// Initialize WhatsApp client with error handling
+(async () => {
+    await waService.initialize();
+})();
 
 // Use server.listen() instead of app.listen() to ensure socket.io and Express share the same HTTP server
 server.listen(PORT, () => {
