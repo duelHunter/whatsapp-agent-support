@@ -3,6 +3,7 @@ const { searchKB } = require('./rag');
 const { generateAIReply } = require('./gemini');
 const requireAuth = require('./middleware/requireAuth');
 const requireRole = require('./middleware/requireRole');
+const { initSocket, setWaState, getWaState } = require('../socketService');
 
 const express = require('express');
 const dotenv = require('dotenv');
@@ -11,6 +12,8 @@ const qrcode = require('qrcode-terminal');
 const cors = require('cors');
 const multer = require('multer');
 const { PDFParse } = require('pdf-parse');
+const http = require('http');
+const QRCode = require('qrcode');
 
 dotenv.config();
 
@@ -125,6 +128,20 @@ app.post('/kb/upload-pdf', requireAuth, requireRole(['owner', 'admin']), upload.
 
 const PORT = process.env.PORT || 4000;
 
+
+// HTTP server (needed for socket.io)
+const server = http.createServer(app);
+
+initSocket(server, process.env.CORS_ORIGIN?.split(",").map(s => s.trim()) || "*");
+
+// -------------------- Socket.io setup --------------------
+const io = new Server(server, {
+    cors: {
+      origin: process.env.CORS_ORIGIN?.split(",").map(s => s.trim()) || "*",
+      methods: ["GET", "POST"]
+    }
+  });
+
 // -------------------- WhatsApp client setup --------------------
 
 const waClient = new Client({
@@ -137,23 +154,33 @@ const waClient = new Client({
 
 waClient.on('qr', (qr) => {
     console.log('📲 Scan this QR code with your WhatsApp:');
+    // print the qr code to console
     qrcode.generate(qr, { small: true });
+
+    // convert to image for dashboard
+    const qrDataUrl = QRCode.toDataURL(qr, { margin: 1, scale: 6 });
+    console.log('QR code image URL:', qrDataUrl);
+    setWaState({ connected: false, qrDataUrl, lastError: null });
 });
 
 waClient.on('ready', () => {
     console.log('✅ WhatsApp client is ready');
+    setWaState({ connected: true, qrDataUrl: null, lastError: null });
 });
 
 waClient.on('authenticated', () => {
     console.log('🔐 WhatsApp authenticated');
+
 });
 
 waClient.on('auth_failure', (msg) => {
     console.error('❌ Auth failure:', msg);
+    setWaState({ connected: false, lastError: msg });
 });
 
 waClient.on('disconnected', (reason) => {
     console.log('⚠️ WhatsApp client disconnected:', reason);
+    setWaState({ connected: false, lastError: reason, qrDataUrl: null });
 });
 
 // -------------------- Message handler (AI replies) --------------------
