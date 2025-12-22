@@ -17,20 +17,21 @@ export async function middleware(req: NextRequest) {
   // Public routes
   const isPublic =
     pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname === "/favicon.ico";
 
   if (isPublic) {
-    // If logged in and visiting login, redirect to dashboard
-    if (pathname.startsWith("/login") && accessToken) {
+    // If logged in and visiting login/signup, redirect to dashboard
+    if ((pathname.startsWith("/login") || pathname.startsWith("/signup")) && accessToken) {
       // Verify token is valid
       const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: `Bearer ${accessToken}` } },
       });
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        return NextResponse.redirect(new URL("/dashboard", req.url));
+        return NextResponse.redirect(new URL("/", req.url));
       }
     }
     return res;
