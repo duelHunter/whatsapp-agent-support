@@ -129,3 +129,22 @@ create table public.kb_chunks (
 );
 ```
 
+
+# Turn on RLS using sql commands
+```
+alter table public.profiles enable row level security;
+alter table public.organizations enable row level security;
+alter table public.memberships enable row level security;
+alter table public.whatsapp_accounts enable row level security;
+alter table public.contacts enable row level security;
+alter table public.conversations enable row level security;
+alter table public.messages enable row level security;
+alter table public.kb_sources enable row level security;
+```
+
+
+# Set basic policies
+```
+create policy "profiles: user can see self" on public.profiles for select using (id = auth.uid());
+create policy "profiles: user can update self" on public.profiles for update using (id = auth.uid());
+```
