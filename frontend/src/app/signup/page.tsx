@@ -5,52 +5,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabaseClient } from "@/lib/supabaseClient";
 
-/**
- * Generate a slug from a string (lowercase, alphanumeric + hyphens)
- */
-function generateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-/**
- * Generate a unique slug by appending random suffix if needed
- */
-async function generateUniqueSlug(baseSlug: string): Promise<string> {
-  let slug = baseSlug;
-  let attempts = 0;
-  const maxAttempts = 10;
-
-  while (attempts < maxAttempts) {
-    // Check if slug exists
-    const { data, error } = await supabaseClient
-      .from("organizations")
-      .select("id")
-      .eq("slug", slug)
-      .maybeSingle();
-
-    if (error && error.code !== "PGRST116") {
-      // PGRST116 is "not found" which is fine, other errors are not
-      throw error;
-    }
-
-    if (!data) {
-      // Slug is available
-      return slug;
-    }
-
-    // Slug exists, append random suffix
-    const randomSuffix = Math.random().toString(36).substring(2, 8);
-    slug = `${baseSlug}-${randomSuffix}`;
-    attempts++;
-  }
-
-  // Fallback: append timestamp if we've tried too many times
-  return `${baseSlug}-${Date.now().toString(36)}`;
-}
-
 export default function SignupPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -83,82 +37,34 @@ export default function SignupPage() {
         return;
       }
 
-      const userId = authData.user.id;
-      const emailPrefix = email.split("@")[0];
-      const orgName = emailPrefix;
-      const baseSlug = generateSlug(emailPrefix);
-
-      // Step 2: Generate unique slug and create organization
-      const uniqueSlug = await generateUniqueSlug(baseSlug);
-
-      const { data: orgData, error: orgError } = await supabaseClient
-        .from("organizations")
-        .insert({
-          name: orgName,
-          slug: uniqueSlug,
-        })
-        .select("id")
-        .single();
-
-      if (orgError || !orgData) {
-        // If org creation fails, we should ideally delete the user
-        // But Supabase Auth doesn't allow deleting users from client
-        // So we'll just show an error and let them try again
-        setError(
-          `Failed to create organization: ${orgError?.message || "unknown error"}`
-        );
-        setLoading(false);
-        return;
-      }
-
-      const orgId = orgData.id;
-
-      // Step 3: Create profile
-      const { error: profileError } = await supabaseClient
-        .from("profiles")
-        .insert({
-          id: userId, // profiles.id references auth.users.id
-          full_name: emailPrefix,
-          default_org_id: orgId,
-        });
-
-      if (profileError) {
-        // Try to clean up organization
-        await supabaseClient.from("organizations").delete().eq("id", orgId);
-        setError(
-          `Failed to create profile: ${profileError.message || "unknown error"}`
-        );
-        setLoading(false);
-        return;
-      }
-
-      // Step 4: Create membership
-      const { error: membershipError } = await supabaseClient
-        .from("memberships")
-        .insert({
-          org_id: orgId,
-          user_id: userId, // memberships.user_id references profiles.id (which is same as auth.users.id)
-          role: "owner",
-        });
-
-      if (membershipError) {
-        // Try to clean up profile and organization
-        await supabaseClient.from("profiles").delete().eq("id", userId);
-        await supabaseClient.from("organizations").delete().eq("id", orgId);
-        setError(
-          `Failed to create membership: ${membershipError.message || "unknown error"}`
-        );
-        setLoading(false);
-        return;
-      }
-
-      // Success! Store session token and redirect
+      // Step 2: If session is available, call bootstrap endpoint
       if (authData.session) {
-        document.cookie = `sb-access-token=${authData.session.access_token}; path=/; max-age=${authData.session.expires_in}; SameSite=Lax`;
+        const accessToken = authData.session.access_token;
+
+        const bootstrapResponse = await fetch("/api/bootstrap", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        const bootstrapData = await bootstrapResponse.json();
+
+        if (!bootstrapResponse.ok) {
+          setError(
+            bootstrapData.error ||
+              "Failed to set up your account. Please try signing in."
+          );
+          setLoading(false);
+          return;
+        }
+
+        // Success! Redirect to dashboard
         router.push("/");
         router.refresh();
       } else {
-        // Email confirmation might be required
+        // Email confirmation is required
         setError(
           "Account created! Please check your email to confirm your account before signing in."
         );
@@ -257,4 +163,3 @@ export default function SignupPage() {
     </div>
   );
 }
-

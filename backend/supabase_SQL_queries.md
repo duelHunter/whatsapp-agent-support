@@ -34,7 +34,7 @@ create table public.memberships (
   unique (org_id, user_id)
 );
 ```
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 # wa_accounts
 ```
 create type public.wa_status as enum ('connected', 'disconnected', 'pending_qr', 'error');
