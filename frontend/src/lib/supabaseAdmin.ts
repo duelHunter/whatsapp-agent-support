@@ -1,5 +1,4 @@
 // lib/supabaseAdmin.ts
-// Server-only: Uses service role key for admin operations
 import { createClient } from "@supabase/supabase-js";
 
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -16,7 +15,7 @@ if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
 
 /**
  * Supabase admin client with service role key.
- * ⚠️ WARNING: This client bypasses RLS. Use only in server-side code.
+ * WARNING: This client bypasses RLS. Use only in server-side code.
  * Never expose this key to the client.
  */
 export const supabaseAdmin = createClient(

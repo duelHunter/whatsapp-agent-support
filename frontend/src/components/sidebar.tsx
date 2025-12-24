@@ -35,7 +35,6 @@ function NavLink({ item }: { item: NavItem }) {
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       }`}
     >
-      <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
       <span>{item.label}</span>
     </Link>
   );
