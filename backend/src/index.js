@@ -276,6 +276,10 @@ process.on('uncaughtException', (error) => {
 
 // Initialize WhatsApp client with error handling
 (async () => {
+    // Load organization and account context from database
+    await waService.loadContext();
+    
+    // Initialize WhatsApp client
     await waService.initialize();
 })();
 

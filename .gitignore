@@ -42,3 +42,9 @@ build/
 tmp/
 temp/
 *.tmp
+
+
+/backend/MESSAGE_PERSISTENCE_GUIDE.md
+/backend/MESSAGE_PERSISTENCE_SUMMARY.md
+/backend/QUICK_START_MESSAGE_PERSISTENCE.md
+

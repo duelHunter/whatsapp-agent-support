@@ -4,6 +4,7 @@ const QRCode = require('qrcode');
 const fs = require('fs');
 const path = require('path');
 const { supabaseAdmin } = require('../auth/supabase');
+const { saveIncomingMessage, saveOutgoingMessage } = require('./messageStore');
 
 /**
  * WhatsApp Service
@@ -15,6 +16,9 @@ class WhatsAppService {
         this.setWaState = null;
         this.searchKB = null;
         this.generateAIReply = null;
+        // Multi-tenant context
+        this.orgId = null;
+        this.waAccountId = null;
     }
 
     /**
@@ -55,6 +59,121 @@ class WhatsAppService {
     }
 
     /**
+     * Set the organization and WhatsApp account context for this client
+     * This should be called after authentication or on startup
+     * @param {string} orgId - Organization UUID
+     * @param {string} waAccountId - WhatsApp account UUID
+     */
+    setContext(orgId, waAccountId) {
+        this.orgId = orgId;
+        this.waAccountId = waAccountId;
+        console.log(`📋 WhatsApp context set: org=${orgId}, account=${waAccountId}`);
+    }
+
+    /**
+     * Load WhatsApp account context from database
+     * Looks for the first available WhatsApp account or creates a placeholder
+     */
+    async loadContext() {
+        try {
+            if (!supabaseAdmin) {
+                console.warn('⚠️ Cannot load context: Supabase not configured');
+                return;
+            }
+
+            // Get first WhatsApp account (in production, this should be more sophisticated)
+            const { data: accounts, error } = await supabaseAdmin
+                .from('whatsapp_accounts')
+                .select('id, org_id')
+                .limit(1)
+                .maybeSingle();
+
+            if (error) {
+                console.error('❌ Error loading WhatsApp account context:', error);
+                return;
+            }
+
+            if (accounts) {
+                this.setContext(accounts.org_id, accounts.id);
+            } else {
+                console.warn('⚠️ No WhatsApp account found in database. Messages will not be persisted until context is set.');
+            }
+        } catch (error) {
+            console.error('❌ Error in loadContext:', error);
+        }
+    }
+
+    /**
+     * Update WhatsApp account status in database
+     * @param {string} status - Status: 'connected', 'disconnected', 'pending_qr', 'error'
+     */
+    async updateAccountStatus(status) {
+        try {
+            if (!supabaseAdmin || !this.waAccountId) {
+                return;
+            }
+
+            const updates = { status };
+            
+            if (status === 'pending_qr') {
+                updates.last_qr_at = new Date().toISOString();
+            } else if (status === 'connected') {
+                updates.last_connected_at = new Date().toISOString();
+            }
+
+            const { error } = await supabaseAdmin
+                .from('whatsapp_accounts')
+                .update(updates)
+                .eq('id', this.waAccountId);
+
+            if (error) {
+                console.error('❌ Error updating account status:', error);
+            } else {
+                console.log(`✅ Updated account status to: ${status}`);
+            }
+        } catch (error) {
+            console.error('❌ Error in updateAccountStatus:', error);
+        }
+    }
+
+    /**
+     * Update WhatsApp account phone number in database
+     */
+    async updateAccountPhoneNumber() {
+        try {
+            if (!supabaseAdmin || !this.waAccountId || !this.client) {
+                return;
+            }
+
+            const info = this.client.info;
+            if (!info || !info.wid) {
+                return;
+            }
+
+            const phoneNumber = info.wid.user; // e.g., "1234567890"
+            const displayName = info.pushname || null;
+
+            const updates = { phone_number: phoneNumber };
+            if (displayName) {
+                updates.display_name = displayName;
+            }
+
+            const { error } = await supabaseAdmin
+                .from('whatsapp_accounts')
+                .update(updates)
+                .eq('id', this.waAccountId);
+
+            if (error) {
+                console.error('❌ Error updating account phone number:', error);
+            } else {
+                console.log(`✅ Updated account phone: ${phoneNumber}`);
+            }
+        } catch (error) {
+            console.error('❌ Error in updateAccountPhoneNumber:', error);
+        }
+    }
+
+    /**
      * Setup all WhatsApp client event handlers
      */
     setupEventHandlers() {
@@ -68,12 +187,21 @@ class WhatsAppService {
             const qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, scale: 6 });
             console.log('QR code image URL generated');
             this.setWaState({ connected: false, qrDataUrl, lastError: null });
+            
+            // Update account status in database
+            await this.updateAccountStatus('pending_qr');
         });
 
         // Ready event
-        this.client.on('ready', () => {
+        this.client.on('ready', async () => {
             console.log('✅ WhatsApp client is ready');
             this.setWaState({ connected: true, qrDataUrl: null, lastError: null });
+            
+            // Update account status in database
+            await this.updateAccountStatus('connected');
+            
+            // Get and update phone number
+            await this.updateAccountPhoneNumber();
         });
 
         // Authenticated event
@@ -91,6 +219,9 @@ class WhatsAppService {
         this.client.on('disconnected', async (reason) => {
             console.log('⚠️ WhatsApp client disconnected:', reason);
             this.setWaState({ connected: false, lastError: reason, qrDataUrl: null });
+            
+            // Update account status in database
+            await this.updateAccountStatus('disconnected');
             
             // Handle LOGOUT - properly destroy client and delete session files
             if (reason === 'LOGOUT') {
@@ -261,49 +392,107 @@ class WhatsAppService {
      * Handle incoming WhatsApp messages
      */
     async handleMessage(msg) {
+        const aiStartTime = Date.now();
+        let savedIncoming = null;
+
         try {
             console.log(`💬 From ${msg.from}: ${msg.body}`);
-
-            //testing supabase database connection
-            // insert messages into messages table
-            const now = new Date().toISOString();       
-            const { data, error } = await supabaseAdmin.from('messages').insert({
-            org_id: '123',
-            conversation_id: '123',
-            wa_account_id: '123',
-            direction: 'inbound',
-            sender_type: 'user',
-            wa_message_id: "sample_message_id",
-            body: msg.body,
-            created_at: now,
-            });
-            if (error) {
-                console.error('❌ Error inserting message:', error);
-            } else {
-                console.log('✅ Message inserted:', data);
-            }
-                ///////////////////////////////
+            console.log("msg is", msg);
 
             const text = msg.body?.trim();
             if (!text) return;
 
+            // Get contact info
+            const contactName = msg.notifyName || null;
+
+            // Save incoming message (non-blocking - don't wait for completion)
+            if (this.orgId && this.waAccountId) {
+                saveIncomingMessage({
+                    orgId: this.orgId,
+                    waAccountId: this.waAccountId,
+                    contactPhone: msg.from,
+                    contactName: contactName,
+                    body: text,
+                    rawMessage: msg,
+                }).catch(error => {
+                    console.error('❌ Failed to save incoming message (non-blocking):', error);
+                });
+            } else {
+                console.warn('⚠️ Cannot save message: org/account context not set');
+            }
+
             // Simple health-check command
             if (text.toLowerCase() === 'ping') {
-                await msg.reply('pong 🏓 (Gemini AI is online)');
+                const reply = 'pong 🏓 (Gemini AI is online)';
+                await msg.reply(reply);
+                
+                // Save ping response (non-blocking)
+                if (this.orgId && this.waAccountId) {
+                    saveOutgoingMessage({
+                        orgId: this.orgId,
+                        waAccountId: this.waAccountId,
+                        contactPhone: msg.from,
+                        body: reply,
+                        aiUsed: false,
+                        rawMessage: null,
+                    }).catch(error => {
+                        console.error('❌ Failed to save ping response (non-blocking):', error);
+                    });
+                }
                 return;
             }
 
             // Generate AI reply using Gemini
+            const kbSearchStart = Date.now();
             const kbMatches = await this.searchKB(text, { topK: 3 });
+            
+            const aiGenerateStart = Date.now();
             const aiReply = await this.generateAIReply({
                 userMessage: text,
                 kbMatches,
             });
+            
+            const aiEndTime = Date.now();
+            const totalAiLatency = aiEndTime - aiStartTime;
+
+            // Send reply
             await msg.reply(aiReply);
+
+            // Save outgoing AI reply (non-blocking)
+            if (this.orgId && this.waAccountId) {
+                saveOutgoingMessage({
+                    orgId: this.orgId,
+                    waAccountId: this.waAccountId,
+                    contactPhone: msg.from,
+                    body: aiReply,
+                    aiUsed: true,
+                    aiModel: 'gemini-2.0-flash-exp', // Update this if you change models
+                    aiLatencyMs: totalAiLatency,
+                    rawMessage: null,
+                }).catch(error => {
+                    console.error('❌ Failed to save outgoing message (non-blocking):', error);
+                });
+            }
+
         } catch (err) {
             console.error('❌ Error handling message:', err);
             try {
-                await msg.reply("Sorry, something went wrong on my side.");
+                const errorReply = "Sorry, something went wrong on my side.";
+                await msg.reply(errorReply);
+
+                // Save error response (non-blocking)
+                if (this.orgId && this.waAccountId) {
+                    saveOutgoingMessage({
+                        orgId: this.orgId,
+                        waAccountId: this.waAccountId,
+                        contactPhone: msg.from,
+                        body: errorReply,
+                        aiUsed: false,
+                        rawMessage: null,
+                    }).catch(error => {
+                        console.error('❌ Failed to save error response (non-blocking):', error);
+                    });
+                }
             } catch (_) { }
         }
     }
