@@ -5,6 +5,13 @@ const requireAuth = require('./middleware/requireAuth');
 const requireRole = require('./middleware/requireRole');
 const { initSocket, setWaState, getWaState } = require('./services/socketService');
 const waService = require('./services/waService');
+const { 
+    createWhatsAppAccount, 
+    getWhatsAppAccountsByOrg,
+    getWhatsAppAccountById,
+    getWhatsAppAccountStats,
+    disconnectWhatsAppAccount
+} = require('./services/whatsappAccountService');
 
 const express = require('express');
 const dotenv = require('dotenv');
@@ -37,7 +44,14 @@ app.use(
     })
 );
 // Preflight for known routes (avoid path-to-regexp wildcard crash)
-app.options(['/', '/kb/add-text', '/kb/upload-pdf', '/api/conversations', '/api/messages'], cors({ origin: origins }));
+app.options([
+    '/', 
+    '/kb/add-text', 
+    '/kb/upload-pdf', 
+    '/api/conversations', 
+    '/api/messages',
+    '/api/whatsapp-accounts'
+], cors({ origin: origins }));
 
 app.use(express.json());
 
@@ -167,6 +181,197 @@ app.get('/api/messages/:conversationId', requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+// ==================== WhatsApp Account Management ====================
+
+// GET /api/whatsapp-accounts - Get all WhatsApp accounts for user's organization
+app.get('/api/whatsapp-accounts', requireAuth, async (req, res) => {
+    try {
+        const { supabaseAdmin } = require('./auth/supabase');
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: 'Database not configured' });
+        }
+
+        // Get user's organization from memberships
+        const { data: memberships, error: membershipError } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .limit(1)
+            .maybeSingle();
+
+        if (membershipError || !memberships) {
+            return res.status(403).json({ error: 'User is not a member of any organization' });
+        }
+
+        const orgId = memberships.org_id;
+
+        // Get WhatsApp accounts for this organization
+        const accounts = await getWhatsAppAccountsByOrg(orgId);
+
+        if (accounts === null) {
+            return res.status(500).json({ error: 'Failed to fetch WhatsApp accounts' });
+        }
+
+        return res.json({ ok: true, accounts });
+    } catch (error) {
+        console.error('❌ Error in /api/whatsapp-accounts:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// GET /api/whatsapp-accounts/:accountId - Get specific WhatsApp account details
+app.get('/api/whatsapp-accounts/:accountId', requireAuth, async (req, res) => {
+    try {
+        const { accountId } = req.params;
+
+        const account = await getWhatsAppAccountById(accountId);
+
+        if (!account) {
+            return res.status(404).json({ error: 'WhatsApp account not found' });
+        }
+
+        // Verify user has access to this account's organization
+        const { supabaseAdmin } = require('./auth/supabase');
+        const { data: memberships } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .eq('org_id', account.org_id)
+            .maybeSingle();
+
+        if (!memberships) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        return res.json({ ok: true, account });
+    } catch (error) {
+        console.error('❌ Error in /api/whatsapp-accounts/:accountId:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// GET /api/whatsapp-accounts/:accountId/stats - Get statistics for a WhatsApp account
+app.get('/api/whatsapp-accounts/:accountId/stats', requireAuth, async (req, res) => {
+    try {
+        const { accountId } = req.params;
+
+        // Get account first to verify access
+        const account = await getWhatsAppAccountById(accountId);
+        if (!account) {
+            return res.status(404).json({ error: 'WhatsApp account not found' });
+        }
+
+        // Verify user has access
+        const { supabaseAdmin } = require('./auth/supabase');
+        const { data: memberships } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .eq('org_id', account.org_id)
+            .maybeSingle();
+
+        if (!memberships) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Get statistics
+        const stats = await getWhatsAppAccountStats(accountId);
+
+        if (!stats) {
+            return res.status(500).json({ error: 'Failed to fetch statistics' });
+        }
+
+        return res.json({ ok: true, stats });
+    } catch (error) {
+        console.error('❌ Error in /api/whatsapp-accounts/:accountId/stats:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/whatsapp-accounts - Create a new WhatsApp account
+app.post('/api/whatsapp-accounts', requireAuth, requireRole(['owner', 'admin']), async (req, res) => {
+    try {
+        const { display_name, notes } = req.body;
+
+        if (!display_name) {
+            return res.status(400).json({ error: 'display_name is required' });
+        }
+
+        const { supabaseAdmin } = require('./auth/supabase');
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: 'Database not configured' });
+        }
+
+        // Get user's organization
+        const { data: memberships, error: membershipError } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .limit(1)
+            .maybeSingle();
+
+        if (membershipError || !memberships) {
+            return res.status(403).json({ error: 'User is not a member of any organization' });
+        }
+
+        const orgId = memberships.org_id;
+
+        // Create WhatsApp account
+        const account = await createWhatsAppAccount({
+            orgId: orgId,
+            displayName: display_name,
+            notes: notes || null
+        });
+
+        if (!account) {
+            return res.status(500).json({ error: 'Failed to create WhatsApp account' });
+        }
+
+        return res.json({ ok: true, account });
+    } catch (error) {
+        console.error('❌ Error in POST /api/whatsapp-accounts:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+// POST /api/whatsapp-accounts/:accountId/disconnect - Disconnect a WhatsApp account
+app.post('/api/whatsapp-accounts/:accountId/disconnect', requireAuth, requireRole(['owner', 'admin']), async (req, res) => {
+    try {
+        const { accountId } = req.params;
+
+        // Verify account exists and user has access
+        const account = await getWhatsAppAccountById(accountId);
+        if (!account) {
+            return res.status(404).json({ error: 'WhatsApp account not found' });
+        }
+
+        const { supabaseAdmin } = require('./auth/supabase');
+        const { data: memberships } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .eq('org_id', account.org_id)
+            .maybeSingle();
+
+        if (!memberships) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+
+        // Disconnect account
+        const success = await disconnectWhatsAppAccount(accountId);
+
+        if (!success) {
+            return res.status(500).json({ error: 'Failed to disconnect account' });
+        }
+
+        return res.json({ ok: true, message: 'Account disconnected successfully' });
+    } catch (error) {
+        console.error('❌ Error in POST /api/whatsapp-accounts/:accountId/disconnect:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // POST /kb/add-text { title, text }
 app.post('/kb/add-text', requireAuth, requireRole(['owner', 'admin']), async (req, res) => {
     try {

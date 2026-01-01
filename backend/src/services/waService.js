@@ -5,6 +5,10 @@ const fs = require('fs');
 const path = require('path');
 const { supabaseAdmin } = require('../auth/supabase');
 const { saveIncomingMessage, saveOutgoingMessage } = require('./messageStore');
+const { 
+    updateWhatsAppStatus, 
+    getFirstWhatsAppAccount 
+} = require('./whatsappAccountService');
 
 /**
  * WhatsApp Service
@@ -72,102 +76,87 @@ class WhatsAppService {
 
     /**
      * Load WhatsApp account context from database
-     * Looks for the first available WhatsApp account or creates a placeholder
+     * Gets the first available WhatsApp account and sets up context
+     * In production, this should be more sophisticated (select by config, etc.)
      */
     async loadContext() {
         try {
             if (!supabaseAdmin) {
                 console.warn('⚠️ Cannot load context: Supabase not configured');
-                return;
+                return false;
             }
 
-            // Get first WhatsApp account (in production, this should be more sophisticated)
-            const { data: accounts, error } = await supabaseAdmin
-                .from('whatsapp_accounts')
-                .select('id, org_id')
-                .limit(1)
-                .maybeSingle();
+            // Use whatsappAccountService to get first account
+            const account = await getFirstWhatsAppAccount();
 
-            if (error) {
-                console.error('❌ Error loading WhatsApp account context:', error);
-                return;
-            }
-
-            if (accounts) {
-                this.setContext(accounts.org_id, accounts.id);
+            if (account) {
+                this.setContext(account.org_id, account.id);
+                console.log(`📋 Loaded WhatsApp account: ${account.display_name} (${account.phone_number || 'not connected'})`);
+                return true;
             } else {
-                console.warn('⚠️ No WhatsApp account found in database. Messages will not be persisted until context is set.');
+                console.warn('⚠️ No WhatsApp account found in database. Please create one first.');
+                console.warn('   Run: INSERT INTO whatsapp_accounts (org_id, display_name) VALUES (\'your-org-id\', \'Main Bot\');');
+                return false;
             }
         } catch (error) {
             console.error('❌ Error in loadContext:', error);
+            return false;
         }
     }
 
     /**
-     * Update WhatsApp account status in database
+     * Update WhatsApp account status in database using whatsappAccountService
      * @param {string} status - Status: 'connected', 'disconnected', 'pending_qr', 'error'
+     * @param {string} errorMessage - Optional error message for 'error' status
      */
-    async updateAccountStatus(status) {
+    async updateAccountStatus(status, errorMessage = null) {
         try {
-            if (!supabaseAdmin || !this.waAccountId) {
+            if (!this.waAccountId) {
+                console.warn('⚠️ Cannot update account status: waAccountId not set');
                 return;
             }
 
-            const updates = { status };
-            
-            if (status === 'pending_qr') {
-                updates.last_qr_at = new Date().toISOString();
-            } else if (status === 'connected') {
-                updates.last_connected_at = new Date().toISOString();
-            }
+            // Use whatsappAccountService to update status
+            await updateWhatsAppStatus({
+                accountId: this.waAccountId,
+                status: status,
+                errorMessage: errorMessage
+            });
 
-            const { error } = await supabaseAdmin
-                .from('whatsapp_accounts')
-                .update(updates)
-                .eq('id', this.waAccountId);
-
-            if (error) {
-                console.error('❌ Error updating account status:', error);
-            } else {
-                console.log(`✅ Updated account status to: ${status}`);
-            }
         } catch (error) {
             console.error('❌ Error in updateAccountStatus:', error);
         }
     }
 
     /**
-     * Update WhatsApp account phone number in database
+     * Update WhatsApp account phone number and display name in database
+     * Called when client connects and we have phone number info
      */
     async updateAccountPhoneNumber() {
         try {
-            if (!supabaseAdmin || !this.waAccountId || !this.client) {
+            if (!this.waAccountId || !this.client) {
                 return;
             }
 
             const info = this.client.info;
             if (!info || !info.wid) {
+                console.warn('⚠️ No WhatsApp info available to update phone number');
                 return;
             }
 
             const phoneNumber = info.wid.user; // e.g., "1234567890"
             const displayName = info.pushname || null;
 
-            const updates = { phone_number: phoneNumber };
-            if (displayName) {
-                updates.display_name = displayName;
-            }
+            // Use whatsappAccountService to update phone and name
+            await updateWhatsAppStatus({
+                accountId: this.waAccountId,
+                status: 'connected', // Already connected at this point
+                phoneNumber: phoneNumber,
+                displayName: displayName
+            });
 
-            const { error } = await supabaseAdmin
-                .from('whatsapp_accounts')
-                .update(updates)
-                .eq('id', this.waAccountId);
+            console.log(`✅ Updated account info: ${displayName || 'No name'} (${phoneNumber})`);
 
-            if (error) {
-                console.error('❌ Error updating account phone number:', error);
-            } else {
-                console.log(`✅ Updated account phone: ${phoneNumber}`);
-            }
         } catch (error) {
             console.error('❌ Error in updateAccountPhoneNumber:', error);
         }
@@ -178,6 +167,8 @@ class WhatsAppService {
      */
     setupEventHandlers() {
         // QR code event
+        // Triggered when WhatsApp needs authentication via QR scan
+        // This happens on first setup or when session expires
         this.client.on('qr', async (qr) => {
             console.log('📲 Scan this QR code with your WhatsApp:');
             // print the qr code to console
@@ -188,39 +179,53 @@ class WhatsAppService {
             console.log('QR code image URL generated');
             this.setWaState({ connected: false, qrDataUrl, lastError: null });
             
-            // Update account status in database
+            // Update database: mark account as pending QR scan
+            // Updates last_qr_at timestamp so admins know when QR was generated
             await this.updateAccountStatus('pending_qr');
         });
 
         // Ready event
+        // Triggered when WhatsApp is fully authenticated and ready to send/receive messages
+        // This is the final "success" state after QR scan or session restore
         this.client.on('ready', async () => {
             console.log('✅ WhatsApp client is ready');
             this.setWaState({ connected: true, qrDataUrl: null, lastError: null });
             
-            // Update account status in database
+            // Update database: mark account as connected
+            // Updates last_connected_at timestamp for monitoring
             await this.updateAccountStatus('connected');
             
-            // Get and update phone number
+            // Get and update phone number + display name from WhatsApp
+            // This populates the whatsapp_accounts.phone_number field
             await this.updateAccountPhoneNumber();
         });
 
         // Authenticated event
+        // Triggered when authentication succeeds (before 'ready')
+        // No database update needed here - 'ready' event handles it
         this.client.on('authenticated', () => {
             console.log('🔐 WhatsApp authenticated');
         });
 
         // Auth failure event
-        this.client.on('auth_failure', (msg) => {
+        // Triggered when QR scan fails or authentication is rejected
+        this.client.on('auth_failure', async (msg) => {
             console.error('❌ Auth failure:', msg);
             this.setWaState({ connected: false, lastError: msg });
+            
+            // Update database: mark account as having an error
+            // This helps admins know there's an authentication problem
+            await this.updateAccountStatus('error', String(msg));
         });
 
         // Disconnected event
+        // Triggered when WhatsApp connection is lost (network, logout, etc.)
         this.client.on('disconnected', async (reason) => {
             console.log('⚠️ WhatsApp client disconnected:', reason);
             this.setWaState({ connected: false, lastError: reason, qrDataUrl: null });
             
-            // Update account status in database
+            // Update database: mark account as disconnected
+            // This lets the admin dashboard show real-time connection status
             await this.updateAccountStatus('disconnected');
             
             // Handle LOGOUT - properly destroy client and delete session files
@@ -230,9 +235,16 @@ class WhatsAppService {
         });
 
         // Error event
-        this.client.on('error', (error) => {
+        // Triggered on general client errors (not auth-specific)
+        this.client.on('error', async (error) => {
             console.error('❌ WhatsApp client error:', error);
             this.setWaState({ connected: false, lastError: error.message || String(error), qrDataUrl: null });
+            
+            // Update database: mark account as having an error
+            // Non-blocking: error recording shouldn't crash the client
+            await this.updateAccountStatus('error', error.message || String(error)).catch(err => {
+                console.warn('⚠️ Could not update error status in database:', err.message);
+            });
         });
 
         // Message event
