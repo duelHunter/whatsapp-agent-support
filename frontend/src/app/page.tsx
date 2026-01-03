@@ -3,6 +3,8 @@
 import { useEffect, useState, useMemo } from "react";
 import { io, Socket } from "socket.io-client";
 import { API_BASE } from "@/lib/api";
+import { getSelectedWaAccountId, backendGet } from "@/lib/backendClient";
+import { WhatsAppAccountStatsResponse } from "@/lib/types";
 
 type WaStatus = {
   connected: boolean;
@@ -14,7 +16,7 @@ type WaStatus = {
 const summaryCards = [
   { title: "Bot Status", value: "Online", description: "WhatsApp client + backend", accent: "emerald" },
   { title: "Messages", value: "—", description: "Total processed", accent: "sky" },
-  { title: "Active Users", value: "—", description: "Unique WhatsApp senders", accent: "violet" },
+  { title: "Active Users", value: "—", description: "Unique contacts", accent: "violet" },
   { title: "Uptime", value: "—", description: "Last session duration", accent: "amber" },
 ];
 
@@ -41,6 +43,11 @@ export default function DashboardPage() {
     updatedAt: 0,
   });
   const [socketConnected, setSocketConnected] = useState(false);
+  const [accountStats, setAccountStats] = useState<{
+    total_messages: number;
+    total_contacts: number;
+  } | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
 
   const socketUrl = useMemo(() => {
     // Extract base URL from API_BASE (e.g., http://localhost:4000)
@@ -84,6 +91,53 @@ export default function DashboardPage() {
 
   const botStatusValue = waStatus.connected ? "Online" : waStatus.qrDataUrl ? "Connecting..." : "Offline";
   const botStatusAccent = waStatus.connected ? "emerald" : waStatus.qrDataUrl ? "amber" : "rose";
+
+  // Fetch account statistics
+  const fetchAccountStats = async () => {
+    const accountId = getSelectedWaAccountId();
+    if (!accountId) {
+      setAccountStats(null);
+      return;
+    }
+
+    try {
+      setStatsLoading(true);
+      const response = await backendGet<WhatsAppAccountStatsResponse>(
+        `/api/whatsapp-accounts/${accountId}/stats`
+      );
+
+      if (response.ok && response.stats) {
+        setAccountStats({
+          total_messages: response.stats.total_messages,
+          total_contacts: response.stats.total_contacts,
+        });
+      } else {
+        setAccountStats(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch account stats:", error);
+      setAccountStats(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  // Fetch stats on mount and when account changes
+  useEffect(() => {
+    void fetchAccountStats();
+  }, []);
+
+  // Listen for account selection changes
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "wa_account_id") {
+        void fetchAccountStats();
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="mx-auto max-w-6xl px-6 py-10">
@@ -97,8 +151,24 @@ export default function DashboardPage() {
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {summaryCards.map((card) => {
             const isBotStatus = card.title === "Bot Status";
-            const displayValue = isBotStatus ? botStatusValue : card.value;
-            const displayAccent = isBotStatus ? botStatusAccent : card.accent;
+            const isMessages = card.title === "Messages";
+            const isActiveUsers = card.title === "Active Users";
+
+            let displayValue = card.value;
+            let displayAccent = card.accent;
+
+            if (isBotStatus) {
+              displayValue = botStatusValue;
+              displayAccent = botStatusAccent;
+            } else if (isMessages && accountStats) {
+              displayValue = accountStats.total_messages.toLocaleString();
+              displayAccent = "sky";
+            } else if (isActiveUsers && accountStats) {
+              displayValue = accountStats.total_contacts.toLocaleString();
+              displayAccent = "violet";
+            } else if ((isMessages || isActiveUsers) && statsLoading) {
+              displayValue = "Loading...";
+            }
             
             return (
               <div
@@ -108,6 +178,26 @@ export default function DashboardPage() {
                 <p className="text-sm font-medium">{card.title}</p>
                 <p className="mt-2 text-2xl font-semibold">{displayValue}</p>
                 <p className="text-sm text-slate-600 dark:text-slate-400">{card.description}</p>
+                {(isMessages || isActiveUsers) && (
+                  <div className="mt-3 flex items-center gap-1">
+                    {statsLoading ? (
+                      <div className="flex items-center gap-1 text-xs text-slate-500">
+                        <div className="h-3 w-3 animate-spin rounded-full border border-slate-400 border-t-transparent"></div>
+                        Loading...
+                      </div>
+                    ) : accountStats ? (
+                      <button
+                        onClick={() => void fetchAccountStats()}
+                        className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition"
+                        title="Refresh stats"
+                      >
+                        ↻ Refresh
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">No account selected</span>
+                    )}
+                  </div>
+                )}
                 {isBotStatus && (
                   <div className="mt-3 flex items-center gap-2">
                     <span
@@ -137,12 +227,12 @@ export default function DashboardPage() {
                 )}
                 {card.title === "Messages" && (
                   <div className="mt-3 text-xs text-slate-500">
-                    View history → <span className="font-semibold text-slate-300">/messages</span>
+                    {accountStats ? "Total processed" : "Select account to view"}
                   </div>
                 )}
                 {card.title === "Active Users" && (
                   <div className="mt-3 text-xs text-slate-500">
-                    See analytics → <span className="font-semibold text-slate-300">/analytics</span>
+                    {accountStats ? "Unique contacts" : "Select account to view"}
                   </div>
                 )}
                 {card.title === "Uptime" && (
