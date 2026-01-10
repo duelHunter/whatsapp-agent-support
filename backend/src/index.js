@@ -385,12 +385,33 @@ app.post('/kb/add-text', requireAuth, requireRole(['owner', 'admin']), async (re
             return res.status(400).json({ error: 'wa_account_id header or body is required' });
         }
 
-        const addedChunks = await addTextToKB(title, text, waAccountId);
+        // Get user's organization from memberships
+        const { supabaseAdmin } = require('./auth/supabase');
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: 'Database not configured' });
+        }
+
+        const { data: memberships, error: membershipError } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .limit(1)
+            .maybeSingle();
+
+        if (membershipError || !memberships) {
+            return res.status(403).json({ error: 'User is not a member of any organization' });
+        }
+
+        const orgId = memberships.org_id;
+        const createdBy = req.auth.user.id;
+
+        //convert text kb to chunks and save to pgvector db
+        const addedChunks = await addTextToKB(title, text, waAccountId, orgId, createdBy, 'text');
 
         return res.json({ ok: true, addedChunks });
     } catch (error) {
         console.error('❌ Error in /kb/add-text:', error);
-        res.status(500).json({ error: 'Failed to add knowledge base text' });
+        res.status(500).json({ error: error.message || 'Failed to add knowledge base text' });
     }
 });
 
@@ -415,6 +436,26 @@ app.post('/kb/upload-pdf', requireAuth, requireRole(['owner', 'admin']), upload.
       if (!waAccountId) {
         return res.status(400).json({ ok: false, error: 'wa_account_id header or body is required' });
       }
+
+      // Get user's organization from memberships
+      const { supabaseAdmin } = require('./auth/supabase');
+      if (!supabaseAdmin) {
+        return res.status(500).json({ ok: false, error: 'Database not configured' });
+      }
+
+      const { data: memberships, error: membershipError } = await supabaseAdmin
+          .from('memberships')
+          .select('org_id')
+          .eq('user_id', req.auth.user.id)
+          .limit(1)
+          .maybeSingle();
+
+      if (membershipError || !memberships) {
+        return res.status(403).json({ ok: false, error: 'User is not a member of any organization' });
+      }
+
+      const orgId = memberships.org_id;
+      const createdBy = req.auth.user.id;
   
       console.log('📄 Received PDF for KB:', {
         filename: req.file.originalname,
@@ -433,7 +474,7 @@ app.post('/kb/upload-pdf', requireAuth, requireRole(['owner', 'admin']), upload.
       }
   
       // Reuse helper to chunk + embed + save
-      const addedChunks = await addTextToKB(title, text, waAccountId);
+      const addedChunks = await addTextToKB(title, text, waAccountId, orgId, createdBy, 'pdf', req.file.originalname);
   
       return res.json({
         ok: true,
