@@ -1,27 +1,19 @@
 "use client";
 
-type Role = "owner" | "admin" | "agent" | "viewer";
+type Role = "admin" | "user";
 
 interface RoleBadgeProps {
   role: Role;
 }
 
 const roleConfig: Record<Role, { label: string; color: string }> = {
-  owner: {
-    label: "Owner",
-    color: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  },
   admin: {
     label: "Admin",
+    color: "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  },
+  user: {
+    label: "User",
     color: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  },
-  agent: {
-    label: "Agent",
-    color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  },
-  viewer: {
-    label: "Viewer",
-    color: "bg-slate-500/20 text-slate-400 border-slate-500/30",
   },
 };
 
@@ -29,9 +21,9 @@ export function RoleBadge({ role }: RoleBadgeProps) {
   const config = roleConfig[role];
   return (
     <span
-      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${config.color}`}
+      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${config?.color || "bg-slate-500/20 text-slate-400 border-slate-500/30"}`}
     >
-      {config.label}
+      {config?.label || role}
     </span>
   );
 }

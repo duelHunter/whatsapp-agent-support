@@ -4,7 +4,7 @@ import { supabaseServer } from "./supabaseServer";
 import { supabaseAdmin } from "./supabaseAdmin";
 import { redirect } from "next/navigation";
 
-export type UserRole = "owner" | "admin" | "operator" | "viewer";
+export type UserRole = "admin" | "user";
 
 export interface CurrentUser {
   id: string;

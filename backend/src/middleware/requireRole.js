@@ -1,7 +1,5 @@
 const { supabaseAdmin } = require('../auth/supabase');
 
-const ROLE_ORDER = ['viewer', 'operator', 'admin', 'owner'];
-
 function normalizeRole(role) {
   if (!role) return null;
   return role.toLowerCase();
@@ -16,13 +14,13 @@ module.exports = function requireRole(allowedRoles = []) {
         return res.status(500).json({ error: 'Supabase not configured' });
       }
 
-      const waAccountId =
-        req.headers['x-wa-account-id'] ||
-        req.body?.wa_account_id ||
-        req.query?.wa_account_id;
+      const orgId =
+        req.headers['x-org-id'] ||
+        req.body?.org_id ||
+        req.query?.org_id;
 
-      if (!waAccountId) {
-        return res.status(400).json({ error: 'wa_account_id is required' });
+      if (!orgId) {
+        return res.status(400).json({ error: 'x-org-id is required' });
       }
 
       if (!req.auth?.user?.id) {
@@ -32,7 +30,7 @@ module.exports = function requireRole(allowedRoles = []) {
       const { data, error } = await supabaseAdmin
         .from('memberships')
         .select('role')
-        .eq('wa_account_id', waAccountId)
+        .eq('org_id', orgId)
         .eq('user_id', req.auth.user.id)
         .maybeSingle();
 
@@ -42,12 +40,12 @@ module.exports = function requireRole(allowedRoles = []) {
       }
 
       if (!data?.role) {
-        return res.status(403).json({ error: 'Not a member of this WhatsApp account' });
+        return res.status(403).json({ error: 'Not a member of this organization' });
       }
 
       const role = normalizeRole(data.role);
       req.auth.role = role;
-      req.auth.wa_account_id = waAccountId;
+      req.auth.org_id = orgId;
 
       if (normalized.length === 0) {
         return next();

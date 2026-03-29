@@ -16,26 +16,27 @@ export interface KbUploadPdfResponse {
   error?: string;
 }
 
-export type WaRole = "owner" | "admin" | "operator" | "viewer";
+export type UserRole = "admin" | "user";
 
 export type WaStatus = "connected" | "disconnected" | "pending_qr" | "error";
 
 export interface Membership {
-  wa_account_id: string;
-  role: WaRole;
+  org_id: string;
+  role: UserRole;
 }
 
-export interface WaAccount {
+export interface Organization {
   id: string;
-  org_id: string;
-  display_name: string;
+  name: string;
+  slug: string;
+  display_name?: string;
   phone_number?: string | null;
-  status: WaStatus;
+  status?: WaStatus;
   last_qr_at?: string | null;
   last_connected_at?: string | null;
   notes?: string | null;
   created_at: string;
-  role?: WaRole;
+  role?: UserRole;
 }
 
 export interface WaAccountStats {
@@ -52,12 +53,12 @@ export interface WaAccountStats {
 
 export interface WhatsAppAccountsResponse {
   ok: boolean;
-  accounts: WaAccount[];
+  accounts: Organization[];
 }
 
 export interface WhatsAppAccountResponse {
   ok: boolean;
-  account: WaAccount;
+  account: Organization;
 }
 
 export interface WhatsAppAccountStatsResponse {
@@ -72,6 +73,6 @@ export interface CreateWhatsAppAccountRequest {
 
 export interface CreateWhatsAppAccountResponse {
   ok: boolean;
-  account: WaAccount;
+  account: Organization;
 }
 
