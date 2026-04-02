@@ -43,6 +43,7 @@ export default function DashboardPage() {
       .then((res) => res.json())
       .then((data) => {
         if (data.role) setUserRole(data.role);
+        console.log("Data", data);
       })
       .catch((err) => console.error("Failed to fetch role", err));
   }, []);

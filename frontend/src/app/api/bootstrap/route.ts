@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
         .insert({
           org_id: orgId,
           user_id: userId,
-          role: "owner",
+          role: "admin",
         });
 
       if (membershipError) {
@@ -232,7 +232,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       orgId,
-      role: existingMembership?.role || "owner",
+      role: existingMembership?.role || "admin",
     });
   } catch (error) {
     console.error("Bootstrap error:", error);
