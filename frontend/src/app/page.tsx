@@ -35,6 +35,18 @@ const accentMap: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Fetch current user's role to adjust UI
+    fetch("/api/auth/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.role) setUserRole(data.role);
+      })
+      .catch((err) => console.error("Failed to fetch role", err));
+  }, []);
+
   const [socket, setSocket] = useState<Socket | null>(null);
   const [waStatus, setWaStatus] = useState<WaStatus>({
     connected: false,
@@ -245,9 +257,10 @@ export default function DashboardPage() {
           })}
         </section>
 
-        <section className="mt-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
-            <div className="flex items-center justify-between">
+        <section className={`mt-8 grid grid-cols-1 gap-6 ${userRole === "admin" ? "xl:grid-cols-2" : ""}`}>
+          {userRole === "admin" && (
+            <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+              <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   Connect WhatsApp
@@ -278,15 +291,7 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-[220px_1fr]">
-              {waStatus.qrDataUrl ? (
-                <div className="flex aspect-square items-center justify-center rounded-2xl border border-slate-300 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/60">
-                  <img
-                    src={waStatus.qrDataUrl}
-                    alt="WhatsApp QR Code"
-                    className="h-full w-full object-contain"
-                  />
-                </div>
-              ) : waStatus.connected ? (
+              {waStatus.connected ? (
                 <div className="flex aspect-square items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10">
                   <div className="text-center">
                     <div className="mx-auto mb-2 h-12 w-12 rounded-full bg-emerald-500/20 flex items-center justify-center">
@@ -294,6 +299,14 @@ export default function DashboardPage() {
                     </div>
                     <p className="text-sm font-semibold text-emerald-300">Connected</p>
                   </div>
+                </div>
+              ) : waStatus.qrDataUrl ? (
+                <div className="flex aspect-square items-center justify-center rounded-2xl border border-slate-300 bg-white p-4 dark:border-slate-700 dark:bg-slate-800/60">
+                  <img
+                    src={waStatus.qrDataUrl}
+                    alt="WhatsApp QR Code"
+                    className="h-full w-full object-contain"
+                  />
                 </div>
               ) : (
                 <div className="flex aspect-square items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-100 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
@@ -338,6 +351,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+          )}
 
           <div className="rounded-2xl border border-slate-200 bg-white/80 p-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
             <div className="flex items-center justify-between">

@@ -31,15 +31,13 @@ async function createWhatsAppAccount({ orgId, displayName = 'WhatsApp Bot', note
         console.log(`📱 Creating WhatsApp account for org: ${orgId}`);
 
         const { data: account, error } = await supabaseAdmin
-            .from('whatsapp_accounts')
-            .insert({
-                org_id: orgId,
+            .from('organizations')
+            .update({
                 display_name: displayName,
-                phone_number: null, // Will be populated when connected
-                status: 'pending_qr', // Initial status: waiting for QR scan
+                status: 'pending_qr',
                 notes: notes,
-                created_at: new Date().toISOString(),
             })
+            .eq('id', orgId)
             .select()
             .single();
 
@@ -122,7 +120,7 @@ async function updateWhatsAppStatus({
         }
 
         const { data: account, error } = await supabaseAdmin
-            .from('whatsapp_accounts')
+            .from('organizations')
             .update(updates)
             .eq('id', accountId)
             .select()
@@ -159,9 +157,9 @@ async function getWhatsAppAccountsByOrg(orgId, connectedOnly = false) {
         }
 
         let query = supabaseAdmin
-            .from('whatsapp_accounts')
+            .from('organizations')
             .select('*')
-            .eq('org_id', orgId);
+            .eq('id', orgId);
 
         if (connectedOnly) {
             query = query.eq('status', 'connected');
@@ -198,7 +196,7 @@ async function getWhatsAppAccountById(accountId) {
         }
 
         const { data: account, error } = await supabaseAdmin
-            .from('whatsapp_accounts')
+            .from('organizations')
             .select('*')
             .eq('id', accountId)
             .single();
@@ -232,7 +230,7 @@ async function getFirstWhatsAppAccount() {
         }
 
         const { data: account, error } = await supabaseAdmin
-            .from('whatsapp_accounts')
+            .from('organizations')
             .select('*')
             .order('created_at', { ascending: true })
             .limit(1)
@@ -266,7 +264,7 @@ async function disconnectWhatsAppAccount(accountId) {
         console.log(`📱 Disconnecting WhatsApp account: ${accountId}`);
 
         const { error } = await supabaseAdmin
-            .from('whatsapp_accounts')
+            .from('organizations')
             .update({ 
                 status: 'disconnected',
                 notes: 'Manually disconnected'
@@ -309,19 +307,19 @@ async function getWhatsAppAccountStats(accountId) {
         const { count: conversationCount } = await supabaseAdmin
             .from('conversations')
             .select('id', { count: 'exact', head: true })
-            .eq('wa_account_id', accountId);
+            .eq('org_id', accountId);
 
         // Get message count
         const { count: messageCount } = await supabaseAdmin
             .from('messages')
             .select('id', { count: 'exact', head: true })
-            .eq('wa_account_id', accountId);
+            .eq('org_id', accountId);
 
         // Get contact count
         const { count: contactCount } = await supabaseAdmin
             .from('contacts')
             .select('id', { count: 'exact', head: true })
-            .eq('wa_account_id', accountId);
+            .eq('org_id', accountId);
 
         return {
             account_id: accountId,

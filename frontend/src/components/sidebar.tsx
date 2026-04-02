@@ -5,9 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { ThemeToggle } from "./theme-toggle";
 import { supabaseClient } from "@/lib/supabaseClient";
 
+import { UserRole } from "@/lib/auth-helpers";
+
 type NavItem = {
   label: string;
   href: string;
+  adminOnly?: boolean;
 };
 
 const navItems: NavItem[] = [
@@ -15,10 +18,10 @@ const navItems: NavItem[] = [
   { label: "Bot Status", href: "/#status" },
   { label: "Messages", href: "/messages" },
   { label: "Chat Tester", href: "/chat-tester" },
-  { label: "Users", href: "/users" },
+  { label: "Users", href: "/users", adminOnly: true },
   { label: "Analytics", href: "/analytics" },
-  { label: "Settings", href: "/settings" },
-  { label: "Knowledge Base", href: "/knowledge-base" },
+  { label: "Settings", href: "/settings", adminOnly: true },
+  { label: "Knowledge Base", href: "/knowledge-base", adminOnly: true },
   { label: "Help", href: "/help" },
 ];
 
@@ -39,7 +42,7 @@ function NavLink({ item }: { item: NavItem }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ userRole }: { userRole?: UserRole | null }) {
   const router = useRouter();
 
   const handleLogout = async () => {
@@ -49,6 +52,11 @@ export function Sidebar() {
     router.push('/login');
     router.refresh();
   };
+
+  const filteredNavItems = navItems.filter((item) => {
+    if (item.adminOnly && userRole !== "admin") return false;
+    return true;
+  });
 
   return (
     <aside className="fixed inset-y-0 left-0 w-64 border-r border-slate-200 bg-white/80 backdrop-blur dark:border-slate-800 dark:bg-slate-900">
@@ -68,7 +76,7 @@ export function Sidebar() {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
-          {navItems.map((item) => (
+          {filteredNavItems.map((item) => (
             <NavLink key={item.href} item={item} />
           ))}
         </nav>

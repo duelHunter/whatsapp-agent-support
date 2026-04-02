@@ -55,8 +55,8 @@ app.options([
 
 app.use(express.json());
 
-function getWaAccountId(req) {
-    return req.headers['x-wa-account-id'] || req.body?.wa_account_id || req.query?.wa_account_id;
+function getOrgId(req) {
+    return req.headers['x-org-id'] || req.body?.org_id || req.query?.org_id || req.headers['x-wa-account-id'];
 }
 
 app.get('/', (req, res) => {
@@ -66,9 +66,9 @@ app.get('/', (req, res) => {
 // GET /api/conversations - Get all conversations for the user's organization
 app.get('/api/conversations', requireAuth, async (req, res) => {
     try {
-        const waAccountId = getWaAccountId(req);
-        if (!waAccountId) {
-            return res.status(400).json({ error: 'wa_account_id header or query is required' });
+        const orgId = getOrgId(req);
+        if (!orgId) {
+            return res.status(400).json({ error: 'x-org-id header or query is required' });
         }
 
         const { supabaseAdmin } = require('./auth/supabase');
@@ -88,7 +88,10 @@ app.get('/api/conversations', requireAuth, async (req, res) => {
             return res.status(403).json({ error: 'User is not a member of any organization' });
         }
 
-        const orgId = memberships.org_id;
+        // Verify request orgId matches user's membership orgId
+        if (memberships.org_id !== orgId) {
+            return res.status(403).json({ error: 'Access to this organization denied' });
+        }
 
         // Fetch conversations with contact details
         const { data: conversations, error: convError } = await supabaseAdmin
@@ -106,7 +109,6 @@ app.get('/api/conversations', requireAuth, async (req, res) => {
                 )
             `)
             .eq('org_id', orgId)
-            .eq('wa_account_id', waAccountId)
             .order('last_message_at', { ascending: false, nullsFirst: false })
             .order('created_at', { ascending: false });
 
@@ -126,9 +128,9 @@ app.get('/api/conversations', requireAuth, async (req, res) => {
 app.get('/api/messages/:conversationId', requireAuth, async (req, res) => {
     try {
         const { conversationId } = req.params;
-        const waAccountId = getWaAccountId(req);
-        if (!waAccountId) {
-            return res.status(400).json({ error: 'wa_account_id header or query is required' });
+        const orgId = getOrgId(req);
+        if (!orgId) {
+            return res.status(400).json({ error: 'x-org-id header or query is required' });
         }
 
         const { supabaseAdmin } = require('./auth/supabase');
@@ -148,15 +150,16 @@ app.get('/api/messages/:conversationId', requireAuth, async (req, res) => {
             return res.status(403).json({ error: 'User is not a member of any organization' });
         }
 
-        const orgId = memberships.org_id;
+        if (memberships.org_id !== orgId) {
+             return res.status(403).json({ error: 'Access to this organization denied' });
+        }
 
-        // Verify conversation belongs to user's org and wa_account
+        // Verify conversation belongs to user's org
         const { data: conversation, error: convCheckError } = await supabaseAdmin
             .from('conversations')
-            .select('id, org_id, wa_account_id')
+            .select('id, org_id')
             .eq('id', conversationId)
             .eq('org_id', orgId)
-            .eq('wa_account_id', waAccountId)
             .single();
 
         if (convCheckError || !conversation) {
@@ -252,7 +255,7 @@ app.get('/api/whatsapp-accounts/:accountId', requireAuth, async (req, res) => {
 });
 
 // GET /api/whatsapp-accounts/:accountId/stats - Get statistics for a WhatsApp account
-app.get('/api/whatsapp-accounts/:accountId/stats', requireAuth, async (req, res) => {
+app.get('/api/whatsapp-accounts/:accountId/stats', requireAuth, requireRole(['admin']), async (req, res) => {
     try {
         const { accountId } = req.params;
 
@@ -290,7 +293,7 @@ app.get('/api/whatsapp-accounts/:accountId/stats', requireAuth, async (req, res)
 });
 
 // POST /api/whatsapp-accounts - Create a new WhatsApp account
-app.post('/api/whatsapp-accounts', requireAuth, requireRole(['owner', 'admin']), async (req, res) => {
+app.post('/api/whatsapp-accounts', requireAuth, requireRole(['admin']), async (req, res) => {
     try {
         const { display_name, notes } = req.body;
 
@@ -336,7 +339,7 @@ app.post('/api/whatsapp-accounts', requireAuth, requireRole(['owner', 'admin']),
 });
 
 // POST /api/whatsapp-accounts/:accountId/disconnect - Disconnect a WhatsApp account
-app.post('/api/whatsapp-accounts/:accountId/disconnect', requireAuth, requireRole(['owner', 'admin']), async (req, res) => {
+app.post('/api/whatsapp-accounts/:accountId/disconnect', requireAuth, requireRole(['admin']), async (req, res) => {
     try {
         const { accountId } = req.params;
 
@@ -373,16 +376,16 @@ app.post('/api/whatsapp-accounts/:accountId/disconnect', requireAuth, requireRol
 });
 
 // POST /kb/add-text { title, text }
-app.post('/kb/add-text', requireAuth, requireRole(['owner', 'admin']), async (req, res) => {
+app.post('/kb/add-text', requireAuth, requireRole(['admin']), async (req, res) => {
     try {
         const { title, text } = req.body;
         if (!title || !text) {
             return res.status(400).json({ error: 'title and text are required' });
         }
 
-        const waAccountId = getWaAccountId(req);
-        if (!waAccountId) {
-            return res.status(400).json({ error: 'wa_account_id header or body is required' });
+        const orgId = getOrgId(req);
+        if (!orgId) {
+            return res.status(400).json({ error: 'x-org-id header or body is required' });
         }
 
         // Get user's organization from memberships
@@ -402,11 +405,14 @@ app.post('/kb/add-text', requireAuth, requireRole(['owner', 'admin']), async (re
             return res.status(403).json({ error: 'User is not a member of any organization' });
         }
 
-        const orgId = memberships.org_id;
+        if (memberships.org_id !== orgId) {
+            return res.status(403).json({ error: 'Access to this organization denied' });
+        }
+        
         const createdBy = req.auth.user.id;
 
         //convert text kb to chunks and save to pgvector db
-        const addedChunks = await addTextToKB(title, text, waAccountId, orgId, createdBy, 'text');
+        const addedChunks = await addTextToKB(title, text, orgId, createdBy, 'text');
 
         return res.json({ ok: true, addedChunks });
     } catch (error) {
@@ -417,7 +423,7 @@ app.post('/kb/add-text', requireAuth, requireRole(['owner', 'admin']), async (re
 
 // POST /kb/upload-pdf
 // Expects: multipart/form-data with field "file" (PDF) and optional "title"
-app.post('/kb/upload-pdf', requireAuth, requireRole(['owner', 'admin']), upload.single('file'), async (req, res) => {
+app.post('/kb/upload-pdf', requireAuth, requireRole(['admin']), upload.single('file'), async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ ok: false, error: 'No file uploaded' });
@@ -432,9 +438,9 @@ app.post('/kb/upload-pdf', requireAuth, requireRole(['owner', 'admin']), upload.
         req.file.originalname.replace(/\.pdf$/i, '') ||
         'Untitled PDF';
 
-      const waAccountId = getWaAccountId(req);
-      if (!waAccountId) {
-        return res.status(400).json({ ok: false, error: 'wa_account_id header or body is required' });
+      const orgId = getOrgId(req);
+      if (!orgId) {
+        return res.status(400).json({ ok: false, error: 'x-org-id header or body is required' });
       }
 
       // Get user's organization from memberships
@@ -454,14 +460,17 @@ app.post('/kb/upload-pdf', requireAuth, requireRole(['owner', 'admin']), upload.
         return res.status(403).json({ ok: false, error: 'User is not a member of any organization' });
       }
 
-      const orgId = memberships.org_id;
+      if (memberships.org_id !== orgId) {
+        return res.status(403).json({ ok: false, error: 'Access to this organization denied' });
+      }
+
       const createdBy = req.auth.user.id;
   
       console.log('📄 Received PDF for KB:', {
         filename: req.file.originalname,
         size: req.file.size,
         title,
-        waAccountId,
+        orgId,
       });
   
       // Extract text from PDF buffer using PDFParse class
@@ -474,7 +483,7 @@ app.post('/kb/upload-pdf', requireAuth, requireRole(['owner', 'admin']), upload.
       }
   
       // Reuse helper to chunk + embed + save
-      const addedChunks = await addTextToKB(title, text, waAccountId, orgId, createdBy, 'pdf', req.file.originalname);
+      const addedChunks = await addTextToKB(title, text, orgId, createdBy, 'pdf', req.file.originalname);
   
       return res.json({
         ok: true,

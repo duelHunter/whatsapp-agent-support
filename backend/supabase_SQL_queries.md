@@ -1,11 +1,19 @@
 ### Core tables in Supabase
 
+create type public.wa_status as enum ('connected', 'disconnected', 'pending_qr', 'error');
+
 # organizations
 ```
 create table public.organizations (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text unique,
+  phone_number text,
+  display_name text,
+  status public.wa_status not null default 'disconnected',
+  last_qr_at timestamptz,
+  last_connected_at timestamptz,
+  notes text,
   created_at timestamptz default now()
 );
 ```
@@ -23,32 +31,15 @@ create table public.profiles (
 
 # Memberships
 ```
-create type public.user_role as enum ('owner', 'admin', 'operator', 'viewer');
+create type public.user_role as enum ('admin', 'user');
 
 create table public.memberships (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
-  role public.user_role not null default 'operator',
+  role public.user_role not null default 'user',
   created_at timestamptz default now(),
   unique (org_id, user_id)
-);
-```
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-# wa_accounts
-```
-create type public.wa_status as enum ('connected', 'disconnected', 'pending_qr', 'error');
-
-create table public.whatsapp_accounts (
-  id uuid primary key default gen_random_uuid(),
-  org_id uuid not null references public.organizations(id) on delete cascade,
-  display_name text not null,
-  phone_number text,
-  status public.wa_status not null default 'pending_qr',
-  last_qr_at timestamptz,
-  last_connected_at timestamptz,
-  notes text,
-  created_at timestamptz default now()
 );
 ```
 
@@ -57,7 +48,6 @@ create table public.whatsapp_accounts (
 create table public.contacts (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
-  wa_account_id uuid not null references public.whatsapp_accounts(id) on delete cascade,
   wa_number text not null,
   name text,
   first_seen_at timestamptz default now(),
@@ -70,7 +60,6 @@ create table public.contacts (
 create table public.conversations (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
-  wa_account_id uuid not null references public.whatsapp_accounts(id) on delete cascade,
   contact_id uuid not null references public.contacts(id) on delete cascade,
   status text not null default 'open',
   last_message_at timestamptz,
@@ -86,7 +75,6 @@ create table public.messages (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
   conversation_id uuid not null references public.conversations(id) on delete cascade,
-  wa_account_id uuid not null references public.whatsapp_accounts(id) on delete cascade,
   direction text not null check (direction in ('inbound', 'outbound')),
   sender_type text not null check (sender_type in ('user', 'bot', 'agent')),
   wa_message_id text,
@@ -104,7 +92,6 @@ create table public.messages (
 create table public.kb_sources (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null references public.organizations(id) on delete cascade,
-  wa_account_id uuid references public.whatsapp_accounts(id) on delete set null,
   title text not null,
   source_type text not null default 'pdf',
   original_filename text,
@@ -135,7 +122,6 @@ create table public.kb_chunks (
 alter table public.profiles enable row level security;
 alter table public.organizations enable row level security;
 alter table public.memberships enable row level security;
-alter table public.whatsapp_accounts enable row level security;
 alter table public.contacts enable row level security;
 alter table public.conversations enable row level security;
 alter table public.messages enable row level security;
