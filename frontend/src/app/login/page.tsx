@@ -30,7 +30,9 @@ export default function LoginPage() {
       }
 
       if (data.session) {
-        // Session is automatically stored by Supabase client
+        // Session is automatically stored by Supabase client just debugging the token here
+        console.log("Logged in token:", data.session.access_token);
+        
         // Redirect to dashboard
         router.push("/");
         router.refresh();
