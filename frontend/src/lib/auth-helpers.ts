@@ -44,8 +44,8 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     return null;
   }
 
-  // Fetch profile
-  const { data: profile } = await supabase
+  // Fetch profile via admin to bypass RLS (since user is already authenticated above)
+  const { data: profile, error: profileError } = await supabaseAdmin
     .from("profiles")
     .select("id, full_name, default_org_id")
     .eq("id", user.id)
@@ -89,13 +89,18 @@ export async function getUserMembership(
     return null;
   }
 
-  const supabase = await supabaseServer();
-  const { data: membership } = await supabase
+  // We use supabaseAdmin here to safely bypass RLS, because we have already 
+  // strictly verified the user's identity via the cookies above in getCurrentUser()
+  const { data: membership, error: membershipError } = await supabaseAdmin
     .from("memberships")
     .select("id, org_id, user_id, role")
     .eq("org_id", orgId)
     .eq("user_id", user.id)
     .single();
+
+  if (membershipError) {
+    console.error("[getUserMembership] Membership fetch error:", membershipError);
+  }
 
   return membership || null;
 }
