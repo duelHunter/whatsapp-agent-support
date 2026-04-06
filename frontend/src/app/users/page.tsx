@@ -4,14 +4,12 @@ import { useState, useEffect, useMemo } from "react";
 import { UsersTable, type OrgUser } from "@/components/users/UsersTable";
 import { InviteUserModal } from "@/components/users/InviteUserModal";
 import { Toast } from "@/components/users/Toast";
-import { backendGet, backendPostJson } from "@/lib/backendClient";
 
 type ToastMessage = {
   id: string;
   message: string;
   type: "success" | "error";
 };
-
 // Mock data generator
 const generateMockUsers = (): OrgUser[] => {
   const names = [
@@ -68,7 +66,8 @@ export default function UsersPage() {
     const fetchUsers = async () => {
       try {
         setLoading(true);
-        const response = await backendGet<{ users: OrgUser[] }>("/api/org/users");
+        const res = await fetch("/api/org/users");
+        const response = await res.json();
         if (response && Array.isArray(response.users)) {
           setUsers(response.users);
           setUseMockData(false);
@@ -143,10 +142,19 @@ export default function UsersPage() {
         setUsers((prev) => [...prev, newUser]);
         addToast("Invitation sent successfully", "success");
       } else {
-        await backendPostJson("/api/org/users/invite", { email, role, message });
+        const res = await fetch("/api/org/users/invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, role, message })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to send invitation");
+        }
         addToast("Invitation sent successfully", "success");
         // Optionally refresh users list
-        const response = await backendGet<{ users: OrgUser[] }>("/api/org/users");
+        const responseRes = await fetch("/api/org/users");
+        const response = await responseRes.json();
         if (response && Array.isArray(response.users)) {
           setUsers(response.users);
         }
@@ -166,10 +174,16 @@ export default function UsersPage() {
         );
         addToast("Role updated successfully", "success");
       } else {
-        await backendPostJson(`/api/org/users/${userId}/role`, { role: newRole });
+        const res = await fetch(`/api/org/users/${userId}/role`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: newRole })
+        });
+        if (!res.ok) throw new Error("Failed to update role");
         addToast("Role updated successfully", "success");
         // Refresh users list
-        const response = await backendGet<{ users: OrgUser[] }>("/api/org/users");
+        const resRefresh = await fetch("/api/org/users");
+        const response = await resRefresh.json();
         if (response && Array.isArray(response.users)) {
           setUsers(response.users);
         }
@@ -178,7 +192,8 @@ export default function UsersPage() {
       addToast((error as Error).message || "Failed to update role", "error");
       // Revert optimistic update on error
       if (useMockData) {
-        const response = await backendGet<{ users: OrgUser[] }>("/api/org/users");
+        const resRefresh = await fetch("/api/org/users");
+        const response = await resRefresh.json();
         if (response && Array.isArray(response.users)) {
           setUsers(response.users);
         }
@@ -193,10 +208,14 @@ export default function UsersPage() {
         setUsers((prev) => prev.filter((u) => u.id !== userId));
         addToast("User removed successfully", "success");
       } else {
-        await backendPostJson(`/api/org/users/${userId}/remove`, {});
+        const res = await fetch(`/api/org/users/${userId}/remove`, {
+          method: "POST"
+        });
+        if (!res.ok) throw new Error("Failed to remove user");
         addToast("User removed successfully", "success");
         // Refresh users list
-        const response = await backendGet<{ users: OrgUser[] }>("/api/org/users");
+        const resRefresh = await fetch("/api/org/users");
+        const response = await resRefresh.json();
         if (response && Array.isArray(response.users)) {
           setUsers(response.users);
         }
@@ -205,7 +224,8 @@ export default function UsersPage() {
       addToast((error as Error).message || "Failed to remove user", "error");
       // Revert optimistic update on error
       if (useMockData) {
-        const response = await backendGet<{ users: OrgUser[] }>("/api/org/users");
+        const resRefresh = await fetch("/api/org/users");
+        const response = await resRefresh.json();
         if (response && Array.isArray(response.users)) {
           setUsers(response.users);
         }
