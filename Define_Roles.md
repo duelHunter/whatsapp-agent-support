@@ -21,3 +21,6 @@ QR should disappear after the successful connection.
 
 Missing Logic: We need to enforce a validation check. While your database memberships table has a role column, there is currently nothing preventing you from promoting multiple people to "admin".
 How to solve: We need to add a PostgreSQL trigger or a software-level check on the backend memberships update/insert endpoint that guarantees COUNT(role) WHERE role = 'admin' AND org_id = X never exceeds 1.
+
+
+When backend sends QR to frondend, always athorize the admin has valid token.

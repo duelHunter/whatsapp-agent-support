@@ -27,7 +27,7 @@ const generateMockUsers = (): OrgUser[] => {
     "Hannah Montana",
   ];
 
-  const roles: OrgUser["role"][] = ["owner", "admin", "agent", "viewer"];
+  const roles: OrgUser["role"][] = ["admin", "user"];
   const statuses: OrgUser["status"][] = ["active", "invited", "disabled"];
 
   return names.map((name, idx) => {
@@ -266,10 +266,8 @@ export default function UsersPage() {
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="all">All Roles</option>
-              <option value="owner">Owner</option>
               <option value="admin">Admin</option>
-              <option value="agent">Agent</option>
-              <option value="viewer">Viewer</option>
+              <option value="user">User</option>
             </select>
 
             <select

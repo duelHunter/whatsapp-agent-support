@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { io, Socket } from "socket.io-client";
 import { API_BASE } from "@/lib/api";
 import { getSelectedWaAccountId, backendGet } from "@/lib/backendClient";
 import { WhatsAppAccountStatsResponse } from "@/lib/types";
+import { supabaseClient } from "@/lib/supabaseClient";
 
 type WaStatus = {
   connected: boolean;
@@ -35,18 +37,27 @@ const accentMap: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     // Fetch current user's role to adjust UI
-    fetch("/api/auth/me")
+    fetch("/api/auth/me", { cache: "no-store" })
       .then((res) => res.json())
-      .then((data) => {
+      .then(async (data) => {
+        if (data.unauthorized) {
+          // Token is missing or invalid, force logout
+          document.cookie = "sb-access-token=; path=/; max-age=0";
+          await supabaseClient.auth.signOut();
+          router.push("/login");
+          return;
+        }
+
         if (data.role) setUserRole(data.role);
         console.log("Data", data);
       })
       .catch((err) => console.error("Failed to fetch role", err));
-  }, []);
+  }, [router]);
 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [waStatus, setWaStatus] = useState<WaStatus>({

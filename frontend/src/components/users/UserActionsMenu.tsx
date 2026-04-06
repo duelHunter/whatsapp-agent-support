@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { RoleBadge } from "./RoleBadge";
 
-type Role = "owner" | "admin" | "agent" | "viewer";
+type Role = "admin" | "user";
 type Status = "active" | "invited" | "disabled";
 
 interface UserActionsMenuProps {
@@ -44,7 +44,7 @@ export function UserActionsMenu({
     }
   }, [isOpen, showRoleMenu]);
 
-  const roles: Role[] = ["owner", "admin", "agent", "viewer"];
+  const roles: Role[] = ["admin", "user"];
 
   const handleRoleSelect = (newRole: Role) => {
     if (newRole !== currentRole) {

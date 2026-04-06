@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 
-type Role = "owner" | "admin" | "agent" | "viewer";
+type Role = "admin" | "user";
 
 interface InviteUserModalProps {
   isOpen: boolean;
@@ -16,7 +16,7 @@ export function InviteUserModal({
   onInvite,
 }: InviteUserModalProps) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<Role>("agent");
+  const [role, setRole] = useState<Role>("user");
   const [message, setMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +25,7 @@ export function InviteUserModal({
   useEffect(() => {
     if (!isOpen) {
       setEmail("");
-      setRole("agent");
+      setRole("user");
       setMessage("");
       setError(null);
       return;
@@ -138,10 +138,8 @@ export function InviteUserModal({
                 disabled={loading}
                 className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-slate-900 focus:border-emerald-500 focus:outline-none disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               >
-                <option value="owner">Owner</option>
                 <option value="admin">Admin</option>
-                <option value="agent">Agent</option>
-                <option value="viewer">Viewer</option>
+                <option value="user">User</option>
               </select>
             </div>
 

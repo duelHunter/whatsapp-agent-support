@@ -8,7 +8,7 @@ export type OrgUser = {
   id: string;
   full_name: string | null;
   email: string;
-  role: "owner" | "admin" | "agent" | "viewer";
+  role: "admin" | "user";
   status: "active" | "invited" | "disabled";
   last_active_at: string | null;
   created_at: string;
@@ -57,10 +57,8 @@ export function UsersTable({
         break;
       case "role":
         const roleOrder: Record<OrgUser["role"], number> = {
-          owner: 0,
-          admin: 1,
-          agent: 2,
-          viewer: 3,
+          admin: 0,
+          user: 1,
         };
         aVal = roleOrder[a.role];
         bVal = roleOrder[b.role];
