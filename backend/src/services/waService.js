@@ -90,12 +90,11 @@ class WhatsAppService {
             const account = await getFirstWhatsAppAccount();
 
             if (account) {
-                this.setContext(account.org_id, account.id);
+                this.setContext(account.id, account.id);
                 console.log(`📋 Loaded WhatsApp account: ${account.display_name} (${account.phone_number || 'not connected'})`);
                 return true;
             } else {
-                console.warn('⚠️ No WhatsApp account found in database. Please create one first.');
-                console.warn('   Run: INSERT INTO whatsapp_accounts (org_id, display_name) VALUES (\'your-org-id\', \'Main Bot\');');
+                console.warn('⚠️ No organization found in database.');
                 return false;
             }
         } catch (error) {
@@ -202,9 +201,14 @@ class WhatsAppService {
 
         // Authenticated event
         // Triggered when authentication succeeds (before 'ready')
-        // No database update needed here - 'ready' event handles it
-        this.client.on('authenticated', () => {
-            console.log('🔐 WhatsApp authenticated');
+        this.client.on('authenticated', async (session) => {
+            console.log('🔐 WhatsApp authenticated. Stopping QR generation.');
+            
+            // Immediately clear QR code to stop frontend from showing it while waiting for 'ready'
+            this.setWaState({ connected: false, qrDataUrl: null, lastError: null });
+            
+            // Update database: mark account as 'connected' immediately upon scanning
+            await this.updateAccountStatus('connected');
         });
 
         // Auth failure event

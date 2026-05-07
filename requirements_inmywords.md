@@ -1,6 +1,7 @@
 ## QR and whatapp session
 
 - When QR is scaned, backend QR generation should be stoped.
+- Database should be updated with phone_number and other columns of organizations table
 - Whatsapp session should be saved in the backend. Even though user(frontend) has leaved or logged out, the session should had be activated.
 - Recent chats should be updated 
 
