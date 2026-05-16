@@ -40,7 +40,7 @@ class WhatsAppService {
         this.client = new Client({
             authStrategy: new LocalAuth(), // keeps session, so you don't scan every time
             puppeteer: {
-                headless: true,
+                headless: false, // Changed from true to false for debugging
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -55,7 +55,7 @@ class WhatsAppService {
             },
             webVersionCache: {
                 type: 'remote',
-                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2413.51-beta.html',
+                remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.3000.1039651969-alpha.html',
             },
         });
 
@@ -153,7 +153,7 @@ class WhatsAppService {
                 phoneNumber: phoneNumber,
                 displayName: displayName
             });
-
+            console.log(`📱 QR Scanned successfully. Connected phone number: ${phoneNumber}`);
             console.log(`✅ Updated account info: ${displayName || 'No name'} (${phoneNumber})`);
 
         } catch (error) {
@@ -209,6 +209,22 @@ class WhatsAppService {
             
             // Update database: mark account as 'connected' immediately upon scanning
             await this.updateAccountStatus('connected');
+
+            // WORKAROUND: If 'ready' event doesn't fire due to WhatsApp updates, 
+            // poll for client.info
+            let pollCount = 0;
+            const infoInterval = setInterval(async () => {
+                pollCount++;
+                if (this.client && this.client.info && this.client.info.wid) {
+                    console.log('✅ Client info found via polling workaround.');
+                    clearInterval(infoInterval);
+                    this.setWaState({ connected: true, qrDataUrl: null, lastError: null });
+                    await this.updateAccountPhoneNumber();
+                } else if (pollCount > 30) {
+                    // Stop after 60 seconds
+                    clearInterval(infoInterval);
+                }
+            }, 2000);
         });
 
         // Auth failure event
