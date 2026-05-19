@@ -272,15 +272,15 @@ class WhatsAppService {
         // doesn't fire when you send a message to yourself (testing) or from linked devices.
         this.client.on('message_create', async (msg) => {
             console.log('📩 New message detected:', msg.body);
+            console.log("msg.from", msg.from);
             
             // Ignore status updates and group chats
             const isStatus = msg.from === 'status@broadcast';
             const isPrivateChat = msg.from.endsWith('@c.us');
         
-            if (!isPrivateChat || isStatus) return;
+            // if (!isPrivateChat || isStatus) return;
             
-            // If you only want to reply to messages sent BY OTHERS (not yourself):
-            // if (msg.fromMe) return; 
+            if (msg.fromMe || isStatus) return; 
 
             await this.handleMessage(msg);
         });
