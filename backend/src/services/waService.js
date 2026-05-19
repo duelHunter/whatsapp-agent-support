@@ -40,7 +40,7 @@ class WhatsAppService {
         this.client = new Client({
             authStrategy: new LocalAuth(), // keeps session, so you don't scan every time
             puppeteer: {
-                headless: false, // Changed from true to false for debugging
+                headless: true, // production should be headless
                 args: [
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
@@ -268,12 +268,20 @@ class WhatsAppService {
         });
 
         // Message event
-        this.client.on('message', async (msg) => {
+        // Using 'message_create' instead of just 'message' because 'message' 
+        // doesn't fire when you send a message to yourself (testing) or from linked devices.
+        this.client.on('message_create', async (msg) => {
+            console.log('📩 New message detected:', msg.body);
+            
             // Ignore status updates and group chats
             const isStatus = msg.from === 'status@broadcast';
             const isPrivateChat = msg.from.endsWith('@c.us');
         
             if (!isPrivateChat || isStatus) return;
+            
+            // If you only want to reply to messages sent BY OTHERS (not yourself):
+            // if (msg.fromMe) return; 
+
             await this.handleMessage(msg);
         });
     }
@@ -429,6 +437,7 @@ class WhatsAppService {
      * Handle incoming WhatsApp messages
      */
     async handleMessage(msg) {
+        console.log(`handleMessage function is called 💬 From ${msg.from}: ${msg.body}`);
         const aiStartTime = Date.now();
         let savedIncoming = null;
 
