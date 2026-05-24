@@ -23,6 +23,8 @@ class WhatsAppService {
         // Multi-tenant context
         this.orgId = null;
         this.waAccountId = null;
+        // Track recently sent bot messages to avoid duplicate DB entries
+        this.recentlySentMsgIds = new Set();
     }
 
     /**
@@ -448,6 +450,35 @@ class WhatsAppService {
             const text = msg.body?.trim();
             if (!text) return;
 
+            // IF THIS MESSAGE WAS SENT BY US (fromMe = true)
+            if (msg.fromMe) {
+                // If we recently sent it via AI/Bot, we already saved it using saveOutgoingMessage
+                if (this.recentlySentMsgIds && this.recentlySentMsgIds.has(msg.id._serialized)) {
+                    this.recentlySentMsgIds.delete(msg.id._serialized);
+                    return; // Already saved, and we don't want to reply to ourselves
+                }
+
+                // Otherwise, it was a manual reply typed from the phone or WhatsApp Web
+                // We should save it as an outgoing message to the database
+                if (this.orgId && this.waAccountId) {
+                    saveOutgoingMessage({
+                        orgId: this.orgId,
+                        waAccountId: this.waAccountId,
+                        contactPhone: msg.to, // User msg.to because WE are the sender
+                        body: text,
+                        aiUsed: false,
+                        rawMessage: msg,
+                    }).catch(error => {
+                        console.error('❌ Failed to save manual outgoing message:', error);
+                    });
+                }
+                
+                // Do not generate an AI reply to our own manual messages
+                return;
+            }
+
+            // -- AT THIS POINT WE KNOW IT'S AN INCOMING MESSAGE FROM A CUSTOMER --
+
             // Get contact info
             const contactName = msg.notifyName || null;
 
@@ -470,10 +501,11 @@ class WhatsAppService {
             // Simple health-check command
             if (text.toLowerCase() === 'ping') {
                 const reply = 'pong 🏓 (Gemini AI is online)';
-                await msg.reply(reply);
+                const sentMsg = await msg.reply(reply);
                 
                 // Save ping response (non-blocking)
                 if (this.orgId && this.waAccountId) {
+                    if (sentMsg) this.recentlySentMsgIds.add(sentMsg.id._serialized);
                     saveOutgoingMessage({
                         orgId: this.orgId,
                         waAccountId: this.waAccountId,
@@ -502,10 +534,11 @@ class WhatsAppService {
             const totalAiLatency = aiEndTime - aiStartTime;
 
             // Send reply
-            await msg.reply(aiReply);
+            const sentMsg = await msg.reply(aiReply);
 
             // Save outgoing AI reply (non-blocking)
             if (this.orgId && this.waAccountId) {
+                if (sentMsg) this.recentlySentMsgIds.add(sentMsg.id._serialized);
                 saveOutgoingMessage({
                     orgId: this.orgId,
                     waAccountId: this.waAccountId,
@@ -524,10 +557,11 @@ class WhatsAppService {
             console.error('❌ Error handling message:', err);
             try {
                 const errorReply = "Sorry, something went wrong on my side.";
-                await msg.reply(errorReply);
+                const sentMsg = await msg.reply(errorReply);
 
                 // Save error response (non-blocking)
                 if (this.orgId && this.waAccountId) {
+                    if (sentMsg) this.recentlySentMsgIds.add(sentMsg.id._serialized);
                     saveOutgoingMessage({
                         orgId: this.orgId,
                         waAccountId: this.waAccountId,

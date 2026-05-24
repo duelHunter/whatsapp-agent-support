@@ -29,7 +29,6 @@ async function findOrCreateContact(orgId, waAccountId, waNumber, name = null) {
             .from('contacts')
             .select('*')
             .eq('org_id', orgId)
-            .eq('wa_account_id', waAccountId)
             .eq('wa_number', waNumber)
             .maybeSingle();
 
@@ -62,7 +61,6 @@ async function findOrCreateContact(orgId, waAccountId, waNumber, name = null) {
             .from('contacts')
             .insert({
                 org_id: orgId,
-                wa_account_id: waAccountId,
                 wa_number: waNumber,
                 name: name,
                 first_seen_at: new Date().toISOString(),
@@ -102,7 +100,6 @@ async function findOrCreateConversation(orgId, waAccountId, contactId) {
             .from('conversations')
             .select('*')
             .eq('org_id', orgId)
-            .eq('wa_account_id', waAccountId)
             .eq('contact_id', contactId)
             .maybeSingle();
 
@@ -119,7 +116,6 @@ async function findOrCreateConversation(orgId, waAccountId, contactId) {
             .from('conversations')
             .insert({
                 org_id: orgId,
-                wa_account_id: waAccountId,
                 contact_id: contactId,
                 status: 'open',
                 created_at: new Date().toISOString(),
@@ -203,7 +199,6 @@ async function saveIncomingMessage({ orgId, waAccountId, contactPhone, contactNa
             .insert({
                 org_id: orgId,
                 conversation_id: conversation.id,
-                wa_account_id: waAccountId,
                 direction: 'inbound',
                 sender_type: 'user',
                 wa_message_id: rawMessage?.id?.id || rawMessage?.id || null,
@@ -275,7 +270,6 @@ async function saveOutgoingMessage({
             .insert({
                 org_id: orgId,
                 conversation_id: conversation.id,
-                wa_account_id: waAccountId,
                 direction: 'outbound',
                 sender_type: aiUsed ? 'bot' : 'agent',
                 wa_message_id: rawMessage?.id?.id || rawMessage?.id || null,
