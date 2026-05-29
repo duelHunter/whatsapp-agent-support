@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { backendGet } from "@/lib/backendClient";
+import { backendGet, backendPostJson } from "@/lib/backendClient";
 import { getSelectedWaAccountId } from "@/lib/backendClient";
 
 interface Contact {
@@ -148,6 +148,8 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [newMessage, setNewMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -222,7 +224,47 @@ export default function MessagesPage() {
       setMessagesLoading(false);
     }
   };
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !selectedConversation) return;
 
+    try {
+      setIsSending(true);
+      const waAccountId = getSelectedWaAccountId();
+      
+      const tempMessage: Message = {
+        id: "temp-" + Date.now(),
+        conversation_id: selectedConversation.id,
+        direction: "outbound",
+        sender_type: "agent",
+        body: newMessage.trim(),
+        message_type: "text",
+        ai_used: false,
+        created_at: new Date().toISOString()
+      };
+      
+      setMessages(prev => [...prev, tempMessage]);
+      setNewMessage("");
+
+      const response = await backendPostJson<{ ok: boolean; message: Message }>(
+        `/api/messages/send`,
+        { 
+          conversationId: selectedConversation.id,
+          text: tempMessage.body
+        },
+        waAccountId
+      );
+
+      // Optionally refresh after sending
+      // fetchMessages(selectedConversation.id);
+    } catch (err) {
+      console.error("Error sending message:", err);
+      setError(err instanceof Error ? err.message : "Failed to send message");
+      fetchMessages(selectedConversation.id); // Refresh if optimistic update failed
+    } finally {
+      setIsSending(false);
+    }
+  };
   const selectedContact = selectedConversation?.contacts;
   const displayName = selectedContact?.name || selectedContact?.wa_number || "Select a conversation";
 
@@ -343,6 +385,29 @@ export default function MessagesPage() {
                   <div ref={messagesEndRef} />
                 </div>
               )}
+            </div>
+
+            {/* Input Area */}
+            <div className="bg-gray-200 px-4 py-3 pb-8 dark:bg-gray-800">
+              <form onSubmit={handleSendMessage} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Type a message"
+                  className="flex-1 rounded-lg border-none px-4 py-2 focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:text-white dark:placeholder-gray-400"
+                  disabled={isSending}
+                />
+                <button
+                  type="submit"
+                  disabled={!newMessage.trim() || isSending}
+                  className="rounded-full bg-green-500 p-2 text-white hover:bg-green-600 disabled:opacity-50"
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+                  </svg>
+                </button>
+              </form>
             </div>
           </>
         ) : (

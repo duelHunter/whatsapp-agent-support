@@ -54,13 +54,82 @@ app.options([
 ], cors({ origin: origins }));
 
 app.use(express.json());
-
+ 
 function getOrgId(req) {
     return req.headers['x-org-id'] || req.body?.org_id || req.query?.org_id || req.headers['x-wa-account-id'];
 }
 
 app.get('/', (req, res) => {
     res.send('WhatsApp AI Bot (Gemini) backend is running ✅');
+});
+
+// POST /api/messages/send
+app.post('/api/messages/send', requireAuth, async (req, res) => {
+    try {
+        const orgId = getOrgId(req);
+        console.log('Received request to send message:', { orgId, body: req.body });//for debugging
+        if (!orgId) return res.status(400).json({ ok: false, error: 'Missing organization ID' });
+
+        const { conversationId, text } = req.body;
+        if (!conversationId || !text) {
+            return res.status(400).json({ ok: false, error: 'conversationId and text are required' });
+        }
+
+        const { supabaseAdmin } = require('./auth/supabase');
+        
+        // 1. Get the conversation to find the contact phone number
+        const { data: convData, error: convError } = await supabaseAdmin
+            .from('conversations')
+            .select(`
+                id,
+                contacts (
+                    wa_number
+                )
+            `)
+            .eq('id', conversationId)
+            .eq('org_id', orgId)
+            .single();
+
+        if (convError || !convData) {
+            return res.status(404).json({ ok: false, error: 'Conversation not found' });
+        }
+
+        const phone = convData.contacts?.wa_number;
+        if (!phone) {
+            return res.status(400).json({ ok: false, error: 'Contact phone not found' });
+        }
+
+        // 2. Send via WhatsApp Service
+        const waService = require('./services/waService');
+        const client = waService.getClient();
+        
+        if (!client) {
+            return res.status(500).json({ ok: false, error: 'WhatsApp client is not ready' });
+        }
+
+        const waNumberId = phone.includes('@c.us') ? phone : `${phone}@c.us`;
+        const sentMsg = await client.sendMessage(waNumberId, text);
+
+        if (sentMsg) {
+             waService.recentlySentMsgIds.add(sentMsg.id._serialized);
+        }
+
+        const { saveOutgoingMessage } = require('./services/messageStore');
+        
+        const dbMessage = await saveOutgoingMessage({
+            orgId,
+            waAccountId: orgId, // placeholder since they merged waAccountId
+            contactPhone: phone,
+            body: text,
+            aiUsed: false,
+            rawMessage: sentMsg
+        });
+
+        res.json({ ok: true, message: dbMessage });
+    } catch (err) {
+        console.error('Error sending message manually:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
 });
 
 // GET /api/conversations - Get all conversations for the user's organization
@@ -169,7 +238,16 @@ app.get('/api/messages/:conversationId', requireAuth, async (req, res) => {
         // Fetch messages
         const { data: messages, error: messagesError } = await supabaseAdmin
             .from('messages')
-            .select('*')
+            .select(`
+                id,
+                conversation_id,
+                direction,
+                sender_type,
+                body,
+                message_type,
+                ai_used,
+                created_at
+            `)
             .eq('conversation_id', conversationId)
             .order('created_at', { ascending: true });
 
@@ -240,7 +318,7 @@ app.get('/api/whatsapp-accounts/:accountId', requireAuth, async (req, res) => {
             .from('memberships')
             .select('org_id')
             .eq('user_id', req.auth.user.id)
-            .eq('org_id', account.org_id)
+            .eq('org_id', account.id)
             .maybeSingle();
 
         if (!memberships) {
@@ -271,7 +349,7 @@ app.get('/api/whatsapp-accounts/:accountId/stats', requireAuth, requireRole(['ad
             .from('memberships')
             .select('org_id')
             .eq('user_id', req.auth.user.id)
-            .eq('org_id', account.org_id)
+            .eq('org_id', account.id)
             .maybeSingle();
 
         if (!memberships) {
@@ -354,7 +432,7 @@ app.post('/api/whatsapp-accounts/:accountId/disconnect', requireAuth, requireRol
             .from('memberships')
             .select('org_id')
             .eq('user_id', req.auth.user.id)
-            .eq('org_id', account.org_id)
+            .eq('org_id', account.id)
             .maybeSingle();
 
         if (!memberships) {
