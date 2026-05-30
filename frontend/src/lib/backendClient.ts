@@ -54,9 +54,8 @@ type FetchOptions = {
 // Centralized function to handle authenticated fetch requests with automatic token management and error handling
 async function authFetch(path: string, options: FetchOptions = {}) {
   const token = await getAccessToken();
-  console.log("Using access token:", token); // Debug log to verify token retrieval
   const orgId = options.orgId ?? getSelectedWaAccountId();
-  console.log("Using orgId:", orgId); // Debug log to verify orgId retrieval
+  
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
   };

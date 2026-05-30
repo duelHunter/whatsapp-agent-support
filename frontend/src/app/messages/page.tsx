@@ -210,7 +210,7 @@ export default function MessagesPage() {
       }
 
       const response = await backendGet<{ ok: boolean; messages: Message[] }>(
-        `/api/messages/${conversationId}`,
+        `/api/messages/${conversationId}?org_id=${waAccountId}`,
         waAccountId
       );
 

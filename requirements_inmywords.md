@@ -15,3 +15,34 @@
 ## Message storing
 
 - When a whatsapp account is connected to the backend, all messages should be saved in the database
+
+## whatsapp status are detected as new messages(bug)
+ 
+Here are the logs 
+``` text
+✅ Updated account info: No (94779433006)
+📩 New message detected: Congratulations ❤️✨
+msg.from status@broadcast
+📩 New message detected: Congratulations both ❤
+msg.from status@broadcast
+📩 New message detected: Congratulations Mittama❤️
+msg.from status@broadcast
+📩 New message detected: 🪷තුන් ලොවක් සනසවනු වස් සිදුහත් කුමරු ලුම්බිණි සල් රුක් සෙවණේ මෙලොව උපත ලද,
+
+🪷මෝහාන්ධකාරයෙන් සියළු සතුන් මුදවාලනු වස් අප මහා බෝධිසත්වයාණන් වහන්සේ ඇසතු බෝ රුක් මුල උතුම් බුදු පදවි ලද,
+
+🪷ලෝ වැසි සියල්ලන් හට දුකින් මිදෙන යතාර්ථය පෙන්වා අප මහා ගෞතම සම්බුදුරජාණන් වහන්සේ උපවත්තන සල් උයනේ පිරිනිවන ලද,
+
+මෝහාන්ධකාරය දුරලා යතාර්ථයේ තතු දකින උතුම් වෙසක් මංගල්‍යයක් වේවා!☸️
+
+ඉංජිනේරු පීඨ ශිෂ්‍ය සංගමය
+රුහුණ විශ්වවිද්‍යාලය
+msg.from status@broadcast
+✅ Client info found via polling workaround.
+📱 Updating WhatsApp account 09dd0d4e-b45a-4a71-a617-4373c34260f6 to status: connected
+✅ WhatsApp account status updated: connected
+📱 QR Scanned successfully. Connected phone number: 94779433006
+✅ Updated account info: No (94779433006)
+🟢 Dashboard socket connected: H43aY8gnizt6qzchAAAB
+🔴 Dashboard socket disconnected: H43aY8gnizt6qzchAAAB
+```

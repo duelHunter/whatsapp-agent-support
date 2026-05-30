@@ -40,7 +40,7 @@ app.use(
     cors({
         origin: origins,
         methods: ['GET', 'POST', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'x-wa-account-id'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'x-wa-account-id', 'x-org-id'],
     })
 );
 // Preflight for known routes (avoid path-to-regexp wildcard crash)
