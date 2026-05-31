@@ -439,6 +439,7 @@ class WhatsAppService {
      * Handle incoming WhatsApp messages
      */
     async handleMessage(msg) {
+        console.log('🔍 lalala:', msg);
         console.log(`handleMessage function is called 💬 From ${msg.from}: ${msg.body}`);
         const aiStartTime = Date.now();
         let savedIncoming = null;
@@ -457,6 +458,15 @@ class WhatsAppService {
                     this.recentlySentMsgIds.delete(msg.id._serialized);
                     return; // Already saved, and we don't want to reply to ourselves
                 }
+                let contactPhoneTo = msg.to.split('@')[0];
+                try {
+                    const contactTo = await msg.getContact();
+                    if (contactTo && contactTo.number) {
+                        contactPhoneTo = contactTo.number;
+                    }
+                } catch (err) {
+                    console.error("Error fetching contact details for outgoing:", err);
+                }
 
                 // Otherwise, it was a manual reply typed from the phone or WhatsApp Web
                 // We should save it as an outgoing message to the database
@@ -464,7 +474,7 @@ class WhatsAppService {
                     saveOutgoingMessage({
                         orgId: this.orgId,
                         waAccountId: this.waAccountId,
-                        contactPhone: msg.to, // User msg.to because WE are the sender
+                        contactPhone: contactPhoneTo,
                         body: text,
                         aiUsed: false,
                         rawMessage: msg,
@@ -480,14 +490,27 @@ class WhatsAppService {
             // -- AT THIS POINT WE KNOW IT'S AN INCOMING MESSAGE FROM A CUSTOMER --
 
             // Get contact info
-            const contactName = msg.notifyName || null;
+            let contactPhone = msg.from.split('@')[0];
+            let contactName = msg.notifyName || null;
+            
+            try {
+                const contact = await msg.getContact();
+                if (contact && contact.number) {
+                    contactPhone = contact.number;
+                }
+                if (contact && (contact.name || contact.pushname)) {
+                    contactName = contact.name || contact.pushname || contactName;
+                }
+            } catch (err) {
+                console.error("Error fetching contact details:", err);
+            }
 
             // Save incoming message (non-blocking - don't wait for completion)
             if (this.orgId && this.waAccountId) {
                 saveIncomingMessage({
                     orgId: this.orgId,
                     waAccountId: this.waAccountId,
-                    contactPhone: msg.from,
+                    contactPhone: contactPhone,
                     contactName: contactName,
                     body: text,
                     rawMessage: msg,
@@ -509,7 +532,7 @@ class WhatsAppService {
                     saveOutgoingMessage({
                         orgId: this.orgId,
                         waAccountId: this.waAccountId,
-                        contactPhone: msg.from,
+                        contactPhone: contactPhone,
                         body: reply,
                         aiUsed: false,
                         rawMessage: null,
@@ -542,7 +565,7 @@ class WhatsAppService {
                 saveOutgoingMessage({
                     orgId: this.orgId,
                     waAccountId: this.waAccountId,
-                    contactPhone: msg.from,
+                    contactPhone: contactPhone,
                     body: aiReply,
                     aiUsed: true,
                     aiModel: 'gemini-2.0-flash-exp', // Update this if you change models
@@ -565,7 +588,7 @@ class WhatsAppService {
                     saveOutgoingMessage({
                         orgId: this.orgId,
                         waAccountId: this.waAccountId,
-                        contactPhone: msg.from,
+                        contactPhone: contactPhone,
                         body: errorReply,
                         aiUsed: false,
                         rawMessage: null,

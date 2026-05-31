@@ -56,15 +56,22 @@ function ConversationItem({
   onClick: () => void;
 }) {
   const contact = conversation.contacts;
-  const displayName = contact?.name || contact?.wa_number || "Unknown";
+  const formatPhoneNumber = (number: string | undefined | null) => {
+    if (!number) return "Unknown";
+    return number.split('@')[0];
+  };
+
+  const displayName = contact?.name || formatPhoneNumber(contact?.wa_number);
   const lastMessage = conversation.last_message_preview || "No messages yet";
   const time = formatTime(conversation.last_message_at);
 
   return (
     <div
       onClick={onClick}
-      className={`flex cursor-pointer items-center gap-3 border-b border-gray-200 px-4 py-3 transition hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800 ${
-        isSelected ? "bg-gray-100 dark:bg-gray-800" : ""
+      className={`group flex cursor-pointer items-center gap-3 border-b border-gray-200 px-4 py-3 dark:border-gray-700 ${
+        isSelected 
+          ? "bg-[#f0f2f5] dark:bg-[#2a3942]" 
+          : "hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]"
       }`}
     >
       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-green-500 text-white">
@@ -83,9 +90,16 @@ function ConversationItem({
             </span>
           )}
         </div>
-        <p className="truncate text-sm text-gray-500 dark:text-gray-400">
-          {lastMessage}
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="truncate text-sm text-gray-500 dark:text-gray-400">
+            {lastMessage}
+          </p>
+          <span className="translate-x-2 text-gray-400 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+            <svg viewBox="0 0 19 20" width="19" height="20">
+              <path fill="currentColor" d="M3.8 6.7l5.7 5.7 5.7-5.7 1.6 1.6-7.3 7.2-7.3-7.2 1.6-1.6z" />
+            </svg>
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -265,8 +279,13 @@ export default function MessagesPage() {
       setIsSending(false);
     }
   };
+  const formatPhoneNumberUI = (number: string | undefined | null) => {
+    if (!number) return "";
+    return number.split('@')[0];
+  };
+
   const selectedContact = selectedConversation?.contacts;
-  const displayName = selectedContact?.name || selectedContact?.wa_number || "Select a conversation";
+  const displayName = selectedContact?.name || formatPhoneNumberUI(selectedContact?.wa_number) || "Select a conversation";
 
   if (loading) {
     return (
@@ -351,7 +370,7 @@ export default function MessagesPage() {
                   {displayName}
                 </h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {selectedContact?.wa_number}
+                  {formatPhoneNumberUI(selectedContact?.wa_number)}
                 </p>
               </div>
             </div>
