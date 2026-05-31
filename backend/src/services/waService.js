@@ -618,6 +618,59 @@ class WhatsAppService {
     }
 
     /**
+     * Send a manual message from the dashboard
+     * @param {string} orgId - Organization UUID
+     * @param {string} conversationId - Conversation UUID
+     * @param {string} text - Message text
+     * @returns {Promise<object>} Saved message object
+     */
+    async sendManualMessage(orgId, conversationId, text) {
+        if (!this.client) {
+            throw new Error('WhatsApp client is not ready');
+        }
+
+        const { getContactPhoneByConversation, saveOutgoingMessage } = require('./messageStore');
+
+        // 1. Get the phone number for this conversation
+        const phone = await getContactPhoneByConversation(conversationId, orgId);
+        if (!phone) {
+            throw new Error('Contact phone not found for this conversation');
+        }
+
+        let sentMsg;
+        try {
+            const waNumberId = phone.includes('@') ? phone : `${phone}@c.us`;
+            sentMsg = await this.client.sendMessage(waNumberId, text);
+        } catch (sendErr) {
+            console.warn(`⚠️ Failed to send via @c.us, retrying with @lid. Error: ${sendErr.message}`);
+            try {
+                // If it fails (e.g. No LID for user), retry with @lid
+                const waNumberLid = phone.includes('@') ? phone : `${phone}@lid`;
+                sentMsg = await this.client.sendMessage(waNumberLid, text);
+            } catch (retryErr) {
+                console.error("❌ Failed to send via @lid as well:", retryErr);
+                throw retryErr;
+            }
+        }
+
+        if (sentMsg) {
+             this.recentlySentMsgIds.add(sentMsg.id._serialized);
+        }
+
+        // 2. Save outgoing message to database
+        const dbMessage = await saveOutgoingMessage({
+            orgId: orgId,
+            waAccountId: this.waAccountId || orgId, // fallback to orgId if merged
+            contactPhone: phone,
+            body: text,
+            aiUsed: false,
+            rawMessage: sentMsg
+        });
+
+        return dbMessage;
+    }
+
+    /**
      * Get the WhatsApp client instance
      */
     getClient() {

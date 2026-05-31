@@ -67,7 +67,7 @@ app.get('/', (req, res) => {
 app.post('/api/messages/send', requireAuth, async (req, res) => {
     try {
         const orgId = getOrgId(req);
-        console.log('Received request to send message:', { orgId, body: req.body });//for debugging
+        console.log('Received request to send message:', { orgId, body: req.body });
         if (!orgId) return res.status(400).json({ ok: false, error: 'Missing organization ID' });
 
         const { conversationId, text } = req.body;
@@ -75,55 +75,8 @@ app.post('/api/messages/send', requireAuth, async (req, res) => {
             return res.status(400).json({ ok: false, error: 'conversationId and text are required' });
         }
 
-        const { supabaseAdmin } = require('./auth/supabase');
-        
-        // 1. Get the conversation to find the contact phone number
-        const { data: convData, error: convError } = await supabaseAdmin
-            .from('conversations')
-            .select(`
-                id,
-                contacts (
-                    wa_number
-                )
-            `)
-            .eq('id', conversationId)
-            .eq('org_id', orgId)
-            .single();
-
-        if (convError || !convData) {
-            return res.status(404).json({ ok: false, error: 'Conversation not found' });
-        }
-
-        const phone = convData.contacts?.wa_number;
-        if (!phone) {
-            return res.status(400).json({ ok: false, error: 'Contact phone not found' });
-        }
-
-        // 2. Send via WhatsApp Service
         const waService = require('./services/waService');
-        const client = waService.getClient();
-        
-        if (!client) {
-            return res.status(500).json({ ok: false, error: 'WhatsApp client is not ready' });
-        }
-
-        const waNumberId = phone.includes('@c.us') ? phone : `${phone}@c.us`;
-        const sentMsg = await client.sendMessage(waNumberId, text);
-
-        if (sentMsg) {
-             waService.recentlySentMsgIds.add(sentMsg.id._serialized);
-        }
-
-        const { saveOutgoingMessage } = require('./services/messageStore');
-        
-        const dbMessage = await saveOutgoingMessage({
-            orgId,
-            waAccountId: orgId, // placeholder since they merged waAccountId
-            contactPhone: phone,
-            body: text,
-            aiUsed: false,
-            rawMessage: sentMsg
-        });
+        const dbMessage = await waService.sendManualMessage(orgId, conversationId, text);
 
         res.json({ ok: true, message: dbMessage });
     } catch (err) {

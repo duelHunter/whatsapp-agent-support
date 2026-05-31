@@ -299,10 +299,44 @@ async function saveOutgoingMessage({
     }
 }
 
+/**
+ * Get contact phone number by conversation ID
+ * @param {string} conversationId - Conversation UUID
+ * @param {string} orgId - Organization UUID
+ * @returns {Promise<string|null>} Phone number or null if not found
+ */
+async function getContactPhoneByConversation(conversationId, orgId) {
+    try {
+        if (!supabaseAdmin) return null;
+        
+        const { data: convData, error } = await supabaseAdmin
+            .from('conversations')
+            .select(`
+                id,
+                contacts (
+                    wa_number
+                )
+            `)
+            .eq('id', conversationId)
+            .eq('org_id', orgId)
+            .single();
+
+        if (error || !convData) {
+            return null;
+        }
+
+        return convData.contacts?.wa_number || null;
+    } catch (err) {
+        console.error('❌ Error getting contact phone by conversation:', err);
+        return null;
+    }
+}
+
 module.exports = {
     saveIncomingMessage,
     saveOutgoingMessage,
     findOrCreateContact,
     findOrCreateConversation,
+    getContactPhoneByConversation,
 };
 
