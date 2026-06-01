@@ -15,14 +15,12 @@ type NavItem = {
 
 const navItems: NavItem[] = [
   { label: "Dashboard", href: "/" },
-  { label: "Bot Status", href: "/#status" },
   { label: "Messages", href: "/messages" },
   { label: "Chat Tester", href: "/chat-tester" },
   { label: "Users", href: "/users", adminOnly: true },
   { label: "Analytics", href: "/analytics" },
   { label: "Settings", href: "/settings", adminOnly: true },
   { label: "Knowledge Base", href: "/knowledge-base", adminOnly: true },
-  { label: "Help", href: "/help" },
 ];
 
 function NavLink({ item }: { item: NavItem }) {

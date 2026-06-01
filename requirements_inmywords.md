@@ -1,9 +1,9 @@
 ## QR and whatapp session
 
-- When QR is scaned, backend QR generation should be stoped.
+<!-- - When QR is scaned, backend QR generation should be stoped.
 - Database should be updated with phone_number and other columns of organizations table
 - Whatsapp session should be saved in the backend. Even though user(frontend) has leaved or logged out, the session should had be activated. Bot and agent should be always activated.
-- Recent chats should be updated in the database.
+- Recent chats should be updated in the database. -->
 
 
 ## Auto replying Bot + Agent
@@ -13,8 +13,8 @@
 
 
 ## Message storing
-
-- When a whatsapp account is connected to the backend, all messages should be saved in the database
+<!-- 
+- When a whatsapp account is connected to the backend, all messages should be saved in the database -->
 
 ## whatsapp status are detected as new messages(bug)
  
@@ -46,3 +46,8 @@ msg.from status@broadcast
 🟢 Dashboard socket connected: H43aY8gnizt6qzchAAAB
 🔴 Dashboard socket disconnected: H43aY8gnizt6qzchAAAB
 ```
+
+## Dashboard and Analytics
+- Total messages today
+- AI vs. Human Ratio: A pie chart showing how many messages were handled automatically by Gemini versus how many required human intervention
+- AI Performance: A chart tracking average AI response times 
