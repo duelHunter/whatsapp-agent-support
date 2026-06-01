@@ -48,29 +48,6 @@ interface TopKBDocument {
   lastUsed: string;
 }
 
-// Sample data generators
-const generateDailyMessages = (days: number): DailyMessageData[] => {
-  const data: DailyMessageData[] = [];
-  const today = new Date();
-  
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    
-    const incoming = Math.floor(Math.random() * 150) + 50;
-    const outgoing = Math.floor(incoming * 0.8) + Math.floor(Math.random() * 30);
-    
-    data.push({
-      date: dateStr,
-      incoming,
-      outgoing,
-      total: incoming + outgoing,
-    });
-  }
-  
-  return data;
-};
 
 const generateKBUsage = (): KBUsageData[] => {
   const kbUsed = Math.floor(Math.random() * 30) + 60; // 60-90%
@@ -147,22 +124,31 @@ export default function AnalyticsPage() {
     fetchSummary();
   }, []);
 
-  // Calculate days based on date range
-  const days = useMemo(() => {
-    switch (dateRange) {
-      case "today":
-        return 1;
-      case "7days":
-        return 7;
-      case "30days":
-        return 30;
-      default:
-        return 7;
+  const [dailyChartData, setDailyChartData] = useState<DailyMessageData[]>([]);
+  const [chartLoading, setChartLoading] = useState(false);
+
+  useEffect(() => {
+    async function fetchDailyMessages() {
+      const waAccountId = getSelectedWaAccountId();
+      if (!waAccountId) return;
+      setChartLoading(true);
+      try {
+        const res = await backendGet<{ ok: boolean; data: DailyMessageData[] }>(
+          `/api/analytics/messages/daily?dateRange=${dateRange}`,
+          waAccountId
+        );
+        if (res.ok && res.data) {
+          setDailyChartData(res.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch daily chart data:", err);
+      } finally {
+        setChartLoading(false);
+      }
     }
+    fetchDailyMessages();
   }, [dateRange]);
 
-  // Generate sample data
-  const dailyMessages = useMemo(() => generateDailyMessages(days), [days]);
   const kbUsage = useMemo(() => generateKBUsage(), [dateRange]);
   const topConversations = useMemo(() => generateTopConversations(), [dateRange]);
   const topKBDocuments = useMemo(() => generateTopKBDocuments(), [dateRange]);
@@ -191,13 +177,6 @@ export default function AnalyticsPage() {
     return Math.floor(Math.random() * 50) + 30; // 30-80
   }, [dateRange]);
 
-  const connectedAccounts = useMemo(() => {
-    return Math.floor(Math.random() * 3) + 2; // 2-5
-  }, []);
-
-  const disconnectedAccounts = useMemo(() => {
-    return Math.floor(Math.random() * 2); // 0-2
-  }, []);
 
   const COLORS = {
     incoming: "#3b82f6", // blue
@@ -253,7 +232,7 @@ export default function AnalyticsPage() {
             <div className="text-sm text-slate-600 dark:text-slate-400">Total Messages</div>
             <div className="mt-2 text-3xl font-bold">{totalMessages.toLocaleString()}</div>
             <div className="mt-1 text-xs text-slate-500">
-              Last {days} {days === 1 ? "day" : "days"}
+              {dateRange === "today" ? "Today" : dateRange === "7days" ? "Last 7 days" : "Last 30 days"}
             </div>
           </div>
 
@@ -295,7 +274,7 @@ export default function AnalyticsPage() {
         </section>
 
         {/* Additional Stats Cards */}
-        <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <section className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="text-sm text-slate-600 dark:text-slate-400">Total Conversations</div>
             <div className="mt-2 text-2xl font-bold">{totalConversations}</div>
@@ -305,25 +284,7 @@ export default function AnalyticsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="text-sm text-slate-600 dark:text-slate-400">WhatsApp Accounts</div>
-            <div className="mt-2 flex items-center gap-4">
-              <div>
-                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {connectedAccounts}
-                </div>
-                <div className="text-xs text-slate-500">Connected</div>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-400">
-                  {disconnectedAccounts}
-                </div>
-                <div className="text-xs text-slate-500">Disconnected</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+<div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="text-sm text-slate-600 dark:text-slate-400">KB Usage</div>
             <div className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
               {kbUsage[0].value}%
@@ -339,65 +300,54 @@ export default function AnalyticsPage() {
           {/* Daily Messages Line Chart */}
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h3 className="mb-4 text-lg font-semibold">Messages Per Day</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={dailyMessages}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(15, 23, 42, 0.95)",
-                    border: "1px solid #334155",
-                    borderRadius: "8px",
-                  }}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="incoming"
-                  stroke={COLORS.incoming}
-                  strokeWidth={2}
-                  name="Incoming"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="outgoing"
-                  stroke={COLORS.outgoing}
-                  strokeWidth={2}
-                  name="Outgoing"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="total"
-                  stroke="#8b5cf6"
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
-                  name="Total"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {chartLoading ? (
+              <div className="flex h-[300px] items-center justify-center text-sm text-slate-400">Loading…</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={dailyChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="date" stroke="#64748b" />
+                  <YAxis stroke="#64748b" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(15, 23, 42, 0.95)",
+                      border: "1px solid #334155",
+                      borderRadius: "8px",
+                    }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="incoming" stroke={COLORS.incoming} strokeWidth={2} name="Incoming" />
+                  <Line type="monotone" dataKey="outgoing" stroke={COLORS.outgoing} strokeWidth={2} name="Outgoing" />
+                  <Line type="monotone" dataKey="total" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" name="Total" />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
           </div>
 
           {/* Incoming vs Outgoing Bar Chart */}
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <h3 className="mb-4 text-lg font-semibold">Incoming vs Outgoing</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={dailyMessages}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" stroke="#64748b" />
-                <YAxis stroke="#64748b" />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(15, 23, 42, 0.95)",
-                    border: "1px solid #334155",
-                    borderRadius: "8px",
-                  }}
-                />
-                <Legend />
-                <Bar dataKey="incoming" fill={COLORS.incoming} name="Incoming" />
-                <Bar dataKey="outgoing" fill={COLORS.outgoing} name="Outgoing" />
-              </BarChart>
-            </ResponsiveContainer>
+            {chartLoading ? (
+              <div className="flex h-[300px] items-center justify-center text-sm text-slate-400">Loading…</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={dailyChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="date" stroke="#64748b" />
+                  <YAxis stroke="#64748b" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(15, 23, 42, 0.95)",
+                      border: "1px solid #334155",
+                      borderRadius: "8px",
+                    }}
+                  />
+                  <Legend />
+                  <Bar dataKey="incoming" fill={COLORS.incoming} name="Incoming" />
+                  <Bar dataKey="outgoing" fill={COLORS.outgoing} name="Outgoing" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </section>
 

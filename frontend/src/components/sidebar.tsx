@@ -19,8 +19,8 @@ const navItems: NavItem[] = [
   { label: "Chat Tester", href: "/chat-tester" },
   { label: "Users", href: "/users", adminOnly: true },
   { label: "Analytics", href: "/analytics" },
-  { label: "Settings", href: "/settings", adminOnly: true },
   { label: "Knowledge Base", href: "/knowledge-base", adminOnly: true },
+  { label: "Settings", href: "/settings", adminOnly: true },
 ];
 
 function NavLink({ item }: { item: NavItem }) {

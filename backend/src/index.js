@@ -138,6 +138,91 @@ app.get('/api/analytics/summary', requireAuth, async (req, res) => {
     }
 });
 
+// GET /api/analytics/messages/daily - Get daily message counts for charting
+app.get('/api/analytics/messages/daily', requireAuth, async (req, res) => {
+    try {
+        const orgId = getOrgId(req);
+        if (!orgId) {
+            return res.status(400).json({ error: 'x-org-id header or query is required' });
+        }
+
+        const { supabaseAdmin } = require('./auth/supabase');
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: 'Database not configured' });
+        }
+
+        const { data: memberships, error: membershipError } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .limit(1)
+            .maybeSingle();
+
+        if (membershipError || !memberships) {
+            return res.status(403).json({ error: 'User is not a member of any organization' });
+        }
+
+        if (memberships.org_id !== orgId) {
+            return res.status(403).json({ error: 'Access to this organization denied' });
+        }
+
+        const dateRange = req.query.dateRange || '7days';
+        const now = new Date();
+        let startDate = new Date();
+        let days = 7;
+
+        if (dateRange === 'today') {
+            startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            days = 1;
+        } else if (dateRange === '30days') {
+            startDate = new Date(now);
+            startDate.setDate(startDate.getDate() - 29);
+            startDate.setHours(0, 0, 0, 0);
+            days = 30;
+        } else {
+            startDate = new Date(now);
+            startDate.setDate(startDate.getDate() - 6);
+            startDate.setHours(0, 0, 0, 0);
+            days = 7;
+        }
+
+        const { data: messages, error: msgError } = await supabaseAdmin
+            .from('messages')
+            .select('direction, created_at')
+            .eq('org_id', orgId)
+            .gte('created_at', startDate.toISOString())
+            .lte('created_at', now.toISOString());
+
+        if (msgError) {
+            console.error('❌ Error fetching daily messages:', msgError);
+            return res.status(500).json({ error: 'Failed to fetch message data' });
+        }
+
+        // Build map covering every day in the range (days with no messages default to 0)
+        const dailyMap = {};
+        for (let i = 0; i < days; i++) {
+            const d = new Date(startDate);
+            d.setDate(d.getDate() + i);
+            const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            dailyMap[label] = { date: label, incoming: 0, outgoing: 0, total: 0 };
+        }
+
+        for (const msg of messages || []) {
+            const label = new Date(msg.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            if (dailyMap[label]) {
+                if (msg.direction === 'inbound') dailyMap[label].incoming++;
+                else dailyMap[label].outgoing++;
+                dailyMap[label].total++;
+            }
+        }
+
+        return res.json({ ok: true, data: Object.values(dailyMap) });
+    } catch (error) {
+        console.error('❌ Error in /api/analytics/messages/daily:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // GET /api/conversations - Get all conversations for the user's organization
 app.get('/api/conversations', requireAuth, async (req, res) => {
     try {
