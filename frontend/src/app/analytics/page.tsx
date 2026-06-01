@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { backendGet, getSelectedWaAccountId } from "@/lib/backendClient";
 import {
   LineChart,
   Line,
@@ -27,6 +28,7 @@ interface DailyMessageData {
 }
 
 interface KBUsageData {
+  [key: string]: string | number;
   name: string;
   value: number;
   color: string;
@@ -107,6 +109,44 @@ const generateTopKBDocuments = (): TopKBDocument[] => {
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = useState<DateRange>("7days");
   
+  // Real data state
+  const [realSummary, setRealSummary] = useState({
+    totalMessages: 0,
+    incomingMessages: 0,
+    outgoingMessages: 0,
+    totalConversations: 0,
+    loading: true,
+  });
+
+  useEffect(() => {
+    async function fetchSummary() {
+      try {
+        const waAccountId = getSelectedWaAccountId();
+        if (!waAccountId) return;
+        
+        const res = await backendGet<{ ok: boolean; summary: any }>(
+          "/api/analytics/summary",
+          waAccountId
+        );
+        
+        if (res.ok && res.summary) {
+          setRealSummary({
+            totalMessages: res.summary.totalMessages || 0,
+            incomingMessages: res.summary.incomingMessages || 0,
+            outgoingMessages: res.summary.outgoingMessages || 0,
+            totalConversations: res.summary.totalConversations || 0,
+            loading: false,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch analytics summary:", err);
+      } finally {
+        setRealSummary((prev) => ({ ...prev, loading: false }));
+      }
+    }
+    fetchSummary();
+  }, []);
+
   // Calculate days based on date range
   const days = useMemo(() => {
     switch (dateRange) {
@@ -128,17 +168,10 @@ export default function AnalyticsPage() {
   const topKBDocuments = useMemo(() => generateTopKBDocuments(), [dateRange]);
 
   // Calculate KPIs
-  const totalMessages = useMemo(() => {
-    return dailyMessages.reduce((sum, day) => sum + day.total, 0);
-  }, [dailyMessages]);
-
-  const incomingMessages = useMemo(() => {
-    return dailyMessages.reduce((sum, day) => sum + day.incoming, 0);
-  }, [dailyMessages]);
-
-  const outgoingMessages = useMemo(() => {
-    return dailyMessages.reduce((sum, day) => sum + day.outgoing, 0);
-  }, [dailyMessages]);
+  const totalMessages = realSummary.totalMessages;
+  const incomingMessages = realSummary.incomingMessages;
+  const outgoingMessages = realSummary.outgoingMessages;
+  const totalConversations = realSummary.totalConversations;
 
   const avgResponseTime = useMemo(() => {
     // Sample: average response time in seconds
@@ -148,10 +181,6 @@ export default function AnalyticsPage() {
   const activeConversations = useMemo(() => {
     // Conversations with messages in last 24h
     return Math.floor(Math.random() * 50) + 20; // 20-70
-  }, [dateRange]);
-
-  const totalConversations = useMemo(() => {
-    return Math.floor(Math.random() * 200) + 150; // 150-350
   }, [dateRange]);
 
   const newConversationsToday = useMemo(() => {
@@ -234,19 +263,19 @@ export default function AnalyticsPage() {
               {incomingMessages.toLocaleString()}
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              {((incomingMessages / totalMessages) * 100).toFixed(1)}% of total
+                {totalMessages > 0 ? ((incomingMessages / totalMessages) * 100).toFixed(1) : "0.0"}% of total
+              </div>
             </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="text-sm text-slate-600 dark:text-slate-400">Outgoing Messages</div>
-            <div className="mt-2 text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-              {outgoingMessages.toLocaleString()}
+  
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="text-sm text-slate-600 dark:text-slate-400">Outgoing Messages</div>
+              <div className="mt-2 text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                {outgoingMessages.toLocaleString()}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">
+                {totalMessages > 0 ? ((outgoingMessages / totalMessages) * 100).toFixed(1) : "0.0"}% of total
+              </div>
             </div>
-            <div className="mt-1 text-xs text-slate-500">
-              {((outgoingMessages / totalMessages) * 100).toFixed(1)}% of total
-            </div>
-          </div>
 
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="text-sm text-slate-600 dark:text-slate-400">Avg Response Time</div>
@@ -384,7 +413,7 @@ export default function AnalyticsPage() {
                     cx="50%"
                     cy="50%"
                     labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
                     outerRadius={100}
                     fill="#8884d8"
                     dataKey="value"

@@ -85,6 +85,59 @@ app.post('/api/messages/send', requireAuth, async (req, res) => {
     }
 });
 
+// GET /api/analytics/summary - Get summary stats for the dashboard
+app.get('/api/analytics/summary', requireAuth, async (req, res) => {
+    try {
+        const orgId = getOrgId(req);
+        if (!orgId) {
+            return res.status(400).json({ error: 'x-org-id header or query is required' });
+        }
+
+        const { supabaseAdmin } = require('./auth/supabase');
+        if (!supabaseAdmin) {
+            return res.status(500).json({ error: 'Database not configured' });
+        }
+
+        // Get user's organization from memberships to verify access
+        const { data: memberships, error: membershipError } = await supabaseAdmin
+            .from('memberships')
+            .select('org_id')
+            .eq('user_id', req.auth.user.id)
+            .limit(1)
+            .maybeSingle();
+
+        if (membershipError || !memberships) {
+            return res.status(403).json({ error: 'User is not a member of any organization' });
+        }
+
+        if (memberships.org_id !== orgId) {
+            return res.status(403).json({ error: 'Access to this organization denied' });
+        }
+
+        // Fetch counts using exact counting
+        const [{ count: totalConversations }, { count: incomingMessages }, { count: outgoingMessages }] = await Promise.all([
+            supabaseAdmin.from('conversations').select('*', { count: 'exact', head: true }).eq('org_id', orgId),
+            supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('direction', 'inbound'),
+            supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('direction', 'outbound' )
+        ]);
+
+        const totalMessages = (incomingMessages || 0) + (outgoingMessages || 0);
+
+        return res.json({ 
+            ok: true, 
+            summary: {
+                totalMessages,
+                incomingMessages: incomingMessages || 0,
+                outgoingMessages: outgoingMessages || 0,
+                totalConversations: totalConversations || 0
+            }
+        });
+    } catch (error) {
+        console.error('❌ Error in /api/analytics/summary:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
 // GET /api/conversations - Get all conversations for the user's organization
 app.get('/api/conversations', requireAuth, async (req, res) => {
     try {
