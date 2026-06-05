@@ -92,6 +92,8 @@ export default function AnalyticsPage() {
     incomingMessages: 0,
     outgoingMessages: 0,
     totalConversations: 0,
+    aiMessages: 0,
+    humanMessages: 0,
     loading: true,
   });
 
@@ -100,18 +102,20 @@ export default function AnalyticsPage() {
       try {
         const waAccountId = getSelectedWaAccountId();
         if (!waAccountId) return;
-        
+
         const res = await backendGet<{ ok: boolean; summary: any }>(
           "/api/analytics/summary",
           waAccountId
         );
-        
+
         if (res.ok && res.summary) {
           setRealSummary({
             totalMessages: res.summary.totalMessages || 0,
             incomingMessages: res.summary.incomingMessages || 0,
             outgoingMessages: res.summary.outgoingMessages || 0,
             totalConversations: res.summary.totalConversations || 0,
+            aiMessages: res.summary.aiMessages || 0,
+            humanMessages: res.summary.humanMessages || 0,
             loading: false,
           });
         }
@@ -158,6 +162,14 @@ export default function AnalyticsPage() {
   const incomingMessages = realSummary.incomingMessages;
   const outgoingMessages = realSummary.outgoingMessages;
   const totalConversations = realSummary.totalConversations;
+  const aiMessages = realSummary.aiMessages;
+  const humanMessages = realSummary.humanMessages;
+  const totalOutgoing = aiMessages + humanMessages;
+
+  const aiRatioData = [
+    { name: "AI (Gemini)", value: aiMessages, color: "#10b981" },
+    { name: "Human Agent", value: humanMessages, color: "#6366f1" },
+  ];
 
   const avgResponseTime = useMemo(() => {
     // Sample: average response time in seconds
@@ -351,37 +363,91 @@ export default function AnalyticsPage() {
           </div>
         </section>
 
-        {/* KB Usage Pie Chart */}
+        {/* AI vs Human Ratio Pie Chart */}
         <section className="mb-8">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <h3 className="mb-4 text-lg font-semibold">Knowledge Base Usage</h3>
-            <div className="flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={kbUsage}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {kbUsage.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(15, 23, 42, 0.95)",
-                      border: "1px solid #334155",
-                      borderRadius: "8px",
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <h3 className="mb-1 text-lg font-semibold">AI vs. Human Ratio</h3>
+            <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
+              Outgoing replies handled automatically by Gemini versus by a human agent.
+            </p>
+
+            {realSummary.loading ? (
+              <div className="flex h-[300px] items-center justify-center text-sm text-slate-400">Loading…</div>
+            ) : totalOutgoing === 0 ? (
+              <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-slate-400">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" className="opacity-40">
+                  <path d="M11 17h2v-6h-2zm0-8h2V7h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" fill="currentColor"/>
+                </svg>
+                <p className="text-sm">No outgoing messages yet</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center gap-6 md:flex-row md:items-center md:justify-center">
+                {/* Pie */}
+                <div className="w-full max-w-xs shrink-0">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie
+                        data={aiRatioData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={70}
+                        outerRadius={110}
+                        paddingAngle={3}
+                        dataKey="value"
+                      >
+                        {aiRatioData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number | undefined) => [
+                          `${value ?? 0} messages (${(((value ?? 0) / totalOutgoing) * 100).toFixed(1)}%)`,
+                        ]}
+                        contentStyle={{
+                          backgroundColor: "rgba(15, 23, 42, 0.95)",
+                          border: "1px solid #334155",
+                          borderRadius: "8px",
+                          color: "#f1f5f9",
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Legend + stats */}
+                <div className="flex flex-col gap-4 md:min-w-[220px]">
+                  {aiRatioData.map((entry) => {
+                    const pct = totalOutgoing > 0 ? (entry.value / totalOutgoing) * 100 : 0;
+                    return (
+                      <div key={entry.name} className="flex items-center gap-3">
+                        <span
+                          className="inline-block h-3 w-3 shrink-0 rounded-full"
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                            {entry.name}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            {entry.value.toLocaleString()} messages &mdash;{" "}
+                            <span className="font-semibold" style={{ color: entry.color }}>
+                              {pct.toFixed(1)}%
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800/60">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Total outgoing replies</p>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                      {totalOutgoing.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
