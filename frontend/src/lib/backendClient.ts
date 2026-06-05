@@ -122,3 +122,11 @@ export async function backendGet<T>(
   return authFetch(path, { method: "GET", orgId: waAccountId });
 }
 
+export async function backendPatch<T>(
+  path: string,
+  body?: unknown,
+  waAccountId?: string | null
+): Promise<T> {
+  return authFetch(path, { method: "PATCH", body, orgId: waAccountId });
+}
+

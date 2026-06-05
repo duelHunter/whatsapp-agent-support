@@ -39,7 +39,7 @@ const origins = process.env.CORS_ORIGIN
 app.use(
     cors({
         origin: origins,
-        methods: ['GET', 'POST', 'OPTIONS'],
+        methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'x-wa-account-id', 'x-org-id'],
     })
 );
@@ -48,9 +48,11 @@ app.options([
     '/', 
     '/kb/add-text', 
     '/kb/upload-pdf', 
-    '/api/conversations', 
+    '/api/conversations',
     '/api/messages',
-    '/api/whatsapp-accounts'
+    '/api/whatsapp-accounts',
+    '/api/bot/status',
+    '/api/bot/toggle',
 ], cors({ origin: origins }));
 
 app.use(express.json());
@@ -61,6 +63,24 @@ function getOrgId(req) {
 
 app.get('/', (req, res) => {
     res.send('WhatsApp AI Bot (Gemini) backend is running ✅');
+});
+
+// GET /api/bot/status — returns current bot auto-reply state
+app.get('/api/bot/status', requireAuth, (req, res) => {
+    res.json({ ok: true, botEnabled: waService.botEnabled });
+});
+
+// PATCH /api/bot/toggle — admin only: flip the auto-reply flag
+app.patch('/api/bot/toggle', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const newValue = !waService.botEnabled;
+        await waService.setBotEnabled(newValue);
+        console.log(`🤖 Bot toggled to: ${newValue ? 'enabled' : 'disabled'}`);
+        res.json({ ok: true, botEnabled: newValue });
+    } catch (error) {
+        console.error('❌ Error toggling bot:', error);
+        res.status(500).json({ error: 'Failed to toggle bot' });
+    }
 });
 
 // POST /api/messages/send

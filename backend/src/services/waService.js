@@ -25,6 +25,8 @@ class WhatsAppService {
         this.waAccountId = null;
         // Track recently sent bot messages to avoid duplicate DB entries
         this.recentlySentMsgIds = new Set();
+        // Whether the bot should auto-reply (admin-toggleable, persisted in DB)
+        this.botEnabled = true;
     }
 
     /**
@@ -93,7 +95,14 @@ class WhatsAppService {
 
             if (account) {
                 this.setContext(account.id, account.id);
-                console.log(`📋 Loaded WhatsApp account: ${account.display_name} (${account.phone_number || 'not connected'})`);
+                // Read persisted bot_enabled (falls back to true if column doesn't exist yet)
+                this.botEnabled = account.bot_enabled !== undefined && account.bot_enabled !== null
+                    ? account.bot_enabled
+                    : true;
+                if (this.setWaState) {
+                    this.setWaState({ botEnabled: this.botEnabled });
+                }
+                console.log(`📋 Loaded WhatsApp account: ${account.display_name} (${account.phone_number || 'not connected'}), bot=${this.botEnabled ? 'enabled' : 'disabled'}`);
                 return true;
             } else {
                 console.warn('⚠️ No organization found in database.');
@@ -160,6 +169,32 @@ class WhatsAppService {
 
         } catch (error) {
             console.error('❌ Error in updateAccountPhoneNumber:', error);
+        }
+    }
+
+    /**
+     * Enable or disable the auto-reply bot.
+     * Persists to DB (organizations.bot_enabled) if the column exists.
+     * Always updates in-memory state and broadcasts via Socket.IO.
+     * @param {boolean} value
+     */
+    async setBotEnabled(value) {
+        this.botEnabled = value;
+        console.log(`🤖 Bot auto-reply ${value ? 'enabled' : 'disabled'}`);
+
+        if (this.waAccountId && supabaseAdmin) {
+            const { error } = await supabaseAdmin
+                .from('organizations')
+                .update({ bot_enabled: value })
+                .eq('id', this.waAccountId);
+            if (error) {
+                // Column may not exist yet — warn and continue
+                console.warn('⚠️ Could not persist bot_enabled to DB:', error.message);
+            }
+        }
+
+        if (this.setWaState) {
+            this.setWaState({ botEnabled: value });
         }
     }
 
@@ -519,6 +554,12 @@ class WhatsAppService {
                 });
             } else {
                 console.warn('⚠️ Cannot save message: org/account context not set');
+            }
+
+            // If bot auto-reply is disabled, stop here — message is saved, no AI reply
+            if (!this.botEnabled) {
+                console.log('🔕 Bot is disabled — message saved, auto-reply skipped');
+                return;
             }
 
             // Simple health-check command

@@ -9,6 +9,7 @@ let waState = {
   qrDataUrl: null,
   lastError: null,
   updatedAt: Date.now(),
+  botEnabled: true,
 };
 
 function initSocket(server, corsOrigins = "*") {
