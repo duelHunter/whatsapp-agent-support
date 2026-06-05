@@ -1,4 +1,4 @@
-const { Client, LocalAuth } = require('whatsapp-web.js');
+const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
 const fs = require('fs');
@@ -706,6 +706,56 @@ class WhatsAppService {
             body: text,
             aiUsed: false,
             rawMessage: sentMsg
+        });
+
+        return dbMessage;
+    }
+
+    /**
+     * Send a media file (image, PDF, document) from the dashboard
+     * @param {string} orgId
+     * @param {string} conversationId
+     * @param {Buffer} fileBuffer - Raw file bytes
+     * @param {string} mimeType   - e.g. 'image/png', 'application/pdf'
+     * @param {string} filename   - Original filename (shown to recipient)
+     * @param {string} caption    - Optional caption text
+     */
+    async sendManualMediaMessage(orgId, conversationId, fileBuffer, mimeType, filename, caption = '') {
+        if (!this.client) throw new Error('WhatsApp client is not ready');
+
+        const { getContactPhoneByConversation, saveOutgoingMessage } = require('./messageStore');
+
+        const phone = await getContactPhoneByConversation(conversationId, orgId);
+        if (!phone) throw new Error('Contact phone not found for this conversation');
+
+        const media = new MessageMedia(mimeType, fileBuffer.toString('base64'), filename);
+        const waId = phone.includes('@') ? phone : `${phone}@c.us`;
+
+        let sentMsg;
+        try {
+            sentMsg = await this.client.sendMessage(waId, media, { caption });
+        } catch (sendErr) {
+            console.warn(`⚠️ Media send via @c.us failed, retrying with @lid: ${sendErr.message}`);
+            const waIdLid = phone.includes('@') ? phone : `${phone}@lid`;
+            sentMsg = await this.client.sendMessage(waIdLid, media, { caption });
+        }
+
+        if (sentMsg) this.recentlySentMsgIds.add(sentMsg.id._serialized);
+
+        // Derive a human-readable message_type from the mime type
+        const messageType = mimeType.startsWith('image/') ? 'image' : 'document';
+
+        // body stores the caption; if empty, store the filename so the bubble has something to show
+        const body = caption.trim() || filename;
+
+        const dbMessage = await saveOutgoingMessage({
+            orgId,
+            waAccountId: this.waAccountId || orgId,
+            contactPhone: phone,
+            body,
+            messageType,
+            aiUsed: false,
+            rawMessage: sentMsg,
         });
 
         return dbMessage;

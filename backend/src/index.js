@@ -24,9 +24,26 @@ dotenv.config();
 
 // -------------------- Multer setup(pdf upload) --------------------
 const upload = multer({
-    storage: multer.memoryStorage(), // keep in RAM
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB limit, tweak if needed
-  });
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+});
+
+// Media upload: images + documents up to 16 MB
+const ALLOWED_MEDIA_TYPES = new Set([
+    'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]);
+const mediaUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 16 * 1024 * 1024 }, // 16 MB
+    fileFilter: (_req, file, cb) => {
+        cb(null, ALLOWED_MEDIA_TYPES.has(file.mimetype));
+    },
+});
 
 // -------------------- Express setup --------------------
 
@@ -53,6 +70,7 @@ app.options([
     '/api/whatsapp-accounts',
     '/api/bot/status',
     '/api/bot/toggle',
+    '/api/messages/send-media',
 ], cors({ origin: origins }));
 
 app.use(express.json());
@@ -105,6 +123,33 @@ app.post('/api/messages/send', requireAuth, async (req, res) => {
     }
 });
 
+// POST /api/messages/send-media — send an image or document from the dashboard
+app.post('/api/messages/send-media', requireAuth, mediaUpload.single('file'), async (req, res) => {
+    try {
+        const orgId = getOrgId(req);
+        if (!orgId) return res.status(400).json({ ok: false, error: 'Missing organization ID' });
+
+        if (!req.file) return res.status(400).json({ ok: false, error: 'No file uploaded or unsupported type' });
+
+        const { conversationId, caption = '' } = req.body;
+        if (!conversationId) return res.status(400).json({ ok: false, error: 'conversationId is required' });
+
+        const dbMessage = await waService.sendManualMediaMessage(
+            orgId,
+            conversationId,
+            req.file.buffer,
+            req.file.mimetype,
+            req.file.originalname,
+            caption
+        );
+
+        res.json({ ok: true, message: dbMessage });
+    } catch (err) {
+        console.error('❌ Error sending media message:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // GET /api/analytics/summary - Get summary stats for the dashboard
 app.get('/api/analytics/summary', requireAuth, async (req, res) => {
     try {
@@ -135,21 +180,31 @@ app.get('/api/analytics/summary', requireAuth, async (req, res) => {
         }
 
         // Fetch counts using exact counting
-        const [{ count: totalConversations }, { count: incomingMessages }, { count: outgoingMessages }] = await Promise.all([
+        const [
+            { count: totalConversations },
+            { count: incomingMessages },
+            { count: outgoingMessages },
+            { count: aiMessages },
+            { count: humanMessages },
+        ] = await Promise.all([
             supabaseAdmin.from('conversations').select('*', { count: 'exact', head: true }).eq('org_id', orgId),
             supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('direction', 'inbound'),
-            supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('direction', 'outbound' )
+            supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('direction', 'outbound'),
+            supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('direction', 'outbound').eq('ai_used', true),
+            supabaseAdmin.from('messages').select('*', { count: 'exact', head: true }).eq('org_id', orgId).eq('direction', 'outbound').eq('ai_used', false),
         ]);
 
         const totalMessages = (incomingMessages || 0) + (outgoingMessages || 0);
 
-        return res.json({ 
-            ok: true, 
+        return res.json({
+            ok: true,
             summary: {
                 totalMessages,
                 incomingMessages: incomingMessages || 0,
                 outgoingMessages: outgoingMessages || 0,
-                totalConversations: totalConversations || 0
+                totalConversations: totalConversations || 0,
+                aiMessages: aiMessages || 0,
+                humanMessages: humanMessages || 0,
             }
         });
     } catch (error) {

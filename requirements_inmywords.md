@@ -48,6 +48,7 @@ msg.from status@broadcast
 ```
 
 ## Dashboard and Analytics
-- Total messages today
+<!-- - Total messages today -->
 - AI vs. Human Ratio: A pie chart showing how many messages were handled automatically by Gemini versus how many required human intervention
 - AI Performance: A chart tracking average AI response times 
+

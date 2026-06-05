@@ -239,15 +239,16 @@ async function saveIncomingMessage({ orgId, waAccountId, contactPhone, contactNa
  * @param {object} params.rawMessage - Raw WhatsApp message object (optional)
  * @returns {Promise<object|null>} Saved message object or null on error
  */
-async function saveOutgoingMessage({ 
-    orgId, 
-    waAccountId, 
-    contactPhone, 
-    body, 
-    aiUsed = false, 
-    aiModel = null, 
+async function saveOutgoingMessage({
+    orgId,
+    waAccountId,
+    contactPhone,
+    body,
+    messageType = 'text',
+    aiUsed = false,
+    aiModel = null,
     aiLatencyMs = null,
-    rawMessage = null 
+    rawMessage = null
 }) {
     try {
         console.log(`💾 Saving outgoing message to ${contactPhone}...`);
@@ -274,7 +275,7 @@ async function saveOutgoingMessage({
                 sender_type: aiUsed ? 'bot' : 'agent',
                 wa_message_id: rawMessage?.id?.id || rawMessage?.id || null,
                 body: body,
-                message_type: 'text',
+                message_type: messageType,
                 ai_used: aiUsed,
                 ai_model: aiModel,
                 ai_latency_ms: aiLatencyMs,
