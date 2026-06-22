@@ -49,6 +49,22 @@ msg.from status@broadcast
 
 ## Dashboard and Analytics
 <!-- - Total messages today -->
-- AI vs. Human Ratio: A pie chart showing how many messages were handled automatically by Gemini versus how many required human intervention
+<!-- - AI vs. Human Ratio: A pie chart showing how many messages were handled automatically by Gemini versus how many required human intervention -->
 - AI Performance: A chart tracking average AI response times 
 
+## LLM for RAG and agent
+- option to add api keys for models
+
+
+## From raheed
+- Real-time web search — uses Tavily API to search the web when knowledge base lacks an answer.
+- Multi-turn conversation memory — LangChain MemorySaver keeps context per user thread
+- Knowledge base management — upload/delete PDF, DOCX, TXT, CSV documents
+- Settings panel — configure AI model, temperature, max tokens, system prompt
+- sonner toast notifications
+- zod validation
+
+
+
+book store database
+user can order books

@@ -5,13 +5,16 @@ const requireAuth = require('./middleware/requireAuth');
 const requireRole = require('./middleware/requireRole');
 const { initSocket, setWaState, getWaState } = require('./services/socketService');
 const waService = require('./services/waService');
-const { 
-    createWhatsAppAccount, 
+const {
+    createWhatsAppAccount,
     getWhatsAppAccountsByOrg,
     getWhatsAppAccountById,
     getWhatsAppAccountStats,
     disconnectWhatsAppAccount
 } = require('./services/whatsappAccountService');
+const bookService = require('./services/bookService');
+const orderService = require('./services/orderService');
+const { supabaseAdmin } = require('./auth/supabase');
 
 const express = require('express');
 const dotenv = require('dotenv');
@@ -56,7 +59,7 @@ const origins = process.env.CORS_ORIGIN
 app.use(
     cors({
         origin: origins,
-        methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+        methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
         allowedHeaders: ['Content-Type', 'Authorization', 'x-wa-account-id', 'x-org-id'],
     })
 );
@@ -741,6 +744,240 @@ app.post('/kb/upload-pdf', requireAuth, requireRole(['admin']), upload.single('f
     }
   });  
 
+
+// ==================== BOOK MANAGEMENT ROUTES ====================
+
+app.get('/api/books', requireAuth, async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const { page, limit, search, category } = req.query;
+        const result = await bookService.listBooks(orgId, {
+            page: parseInt(page) || 1,
+            limit: parseInt(limit) || 20,
+            search,
+            category,
+        });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        console.error('Error in GET /api/books:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/api/books/categories', requireAuth, async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const categories = await bookService.getCategories(orgId);
+        res.json({ ok: true, categories });
+    } catch (err) {
+        console.error('Error in GET /api/books/categories:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/api/books/:id', requireAuth, async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const book = await bookService.getBook(orgId, req.params.id);
+        res.json({ ok: true, book });
+    } catch (err) {
+        console.error('Error in GET /api/books/:id:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.post('/api/books', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const book = await bookService.createBook(orgId, req.body);
+        res.json({ ok: true, book });
+    } catch (err) {
+        console.error('Error in POST /api/books:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.patch('/api/books/:id', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const book = await bookService.updateBook(orgId, req.params.id, req.body);
+        res.json({ ok: true, book });
+    } catch (err) {
+        console.error('Error in PATCH /api/books/:id:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.delete('/api/books/:id', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        await bookService.deleteBook(orgId, req.params.id);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('Error in DELETE /api/books/:id:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ==================== ORDER MANAGEMENT ROUTES ====================
+
+app.get('/api/orders', requireAuth, async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const { status, page, limit } = req.query;
+        const result = await orderService.listOrders(orgId, {
+            status,
+            page: parseInt(page) || 1,
+            limit: parseInt(limit) || 20,
+        });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        console.error('Error in GET /api/orders:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/api/orders/:id', requireAuth, async (req, res) => {
+    try {
+        const order = await orderService.getOrderById(req.params.id);
+        res.json({ ok: true, order });
+    } catch (err) {
+        console.error('Error in GET /api/orders/:id:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.patch('/api/orders/:id/status', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const { status, admin_notes } = req.body;
+        await orderService.updateOrderStatus(req.params.id, status, admin_notes);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('Error in PATCH /api/orders/:id/status:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.post('/api/orders/:id/approve-receipt', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        await orderService.approveReceipt(req.params.id, req.user?.id);
+
+        // Auto-notify customer via WhatsApp
+        try {
+            const order = await orderService.getOrderById(req.params.id);
+            if (order?.conversation_id) {
+                await waService.sendManualMessage(
+                    order.org_id,
+                    order.conversation_id,
+                    `✅ Your payment for order #${order.order_number} has been confirmed! We'll ship your order soon. Thank you for your purchase!`
+                );
+            }
+        } catch (notifyErr) {
+            console.error('⚠️ Failed to auto-notify customer:', notifyErr);
+        }
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('Error in POST /api/orders/:id/approve-receipt:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.post('/api/orders/:id/reject-receipt', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const { notes } = req.body;
+        await orderService.rejectReceipt(req.params.id, req.user?.id, notes);
+
+        // Auto-notify customer via WhatsApp
+        try {
+            const order = await orderService.getOrderById(req.params.id);
+            if (order?.conversation_id) {
+                await waService.sendManualMessage(
+                    order.org_id,
+                    order.conversation_id,
+                    `We couldn't verify the payment receipt for order #${order.order_number}. Please send a clearer photo of your bank transfer receipt, or contact us for help.`
+                );
+            }
+        } catch (notifyErr) {
+            console.error('⚠️ Failed to auto-notify customer:', notifyErr);
+        }
+
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('Error in POST /api/orders/:id/reject-receipt:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/api/orders/:id/receipt', requireAuth, async (req, res) => {
+    try {
+        const { data: receipt } = await supabaseAdmin
+            .from('payment_receipts')
+            .select('id, media_type, media_mime_type, media_data, status, created_at, notes')
+            .eq('order_id', req.params.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+        if (!receipt) {
+            return res.status(404).json({ ok: false, error: 'No receipt found' });
+        }
+
+        if (req.query.download === 'true' && receipt.media_data) {
+            res.setHeader('Content-Type', receipt.media_mime_type || 'application/octet-stream');
+            res.setHeader('Content-Disposition', `inline; filename="receipt.${receipt.media_type === 'image' ? 'jpg' : 'pdf'}"`);
+            return res.send(Buffer.from(receipt.media_data));
+        }
+
+        const { media_data, ...meta } = receipt;
+        meta.has_media = !!media_data;
+        res.json({ ok: true, receipt: meta });
+    } catch (err) {
+        console.error('Error in GET /api/orders/:id/receipt:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ==================== AGENT SETTINGS ROUTE ====================
+
+app.patch('/api/settings/agent', requireAuth, requireRole(['admin']), async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const { agent_mode, bank_transfer_details } = req.body;
+
+        const updates = {};
+        if (agent_mode) updates.agent_mode = agent_mode;
+        if (bank_transfer_details !== undefined) updates.bank_transfer_details = bank_transfer_details;
+
+        const { error } = await supabaseAdmin
+            .from('organizations')
+            .update(updates)
+            .eq('id', orgId);
+
+        if (error) throw error;
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('Error in PATCH /api/settings/agent:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+app.get('/api/settings/agent', requireAuth, async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const { data, error } = await supabaseAdmin
+            .from('organizations')
+            .select('agent_mode, bank_transfer_details')
+            .eq('id', orgId)
+            .single();
+
+        if (error) throw error;
+        res.json({ ok: true, ...data });
+    } catch (err) {
+        console.error('Error in GET /api/settings/agent:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
 
 const PORT = process.env.PORT || 4000;
 

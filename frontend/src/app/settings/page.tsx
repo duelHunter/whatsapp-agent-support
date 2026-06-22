@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseClient } from "@/lib/supabaseClient";
+import { backendGet, backendPatch } from "@/lib/backendClient";
+import type { AgentMode } from "@/lib/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -23,7 +25,7 @@ type Org = {
   created_at: string;
 };
 
-type Section = "profile" | "organization" | "security";
+type Section = "profile" | "organization" | "agent" | "security";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -122,9 +124,16 @@ export default function SettingsPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordStatus, setPasswordStatus] = useState({ ok: true, msg: "" });
 
+  // ── Agent state (admin only) ──
+  const [agentMode, setAgentMode] = useState<AgentMode>("kb_only");
+  const [bankTransferDetails, setBankTransferDetails] = useState("");
+  const [agentSaving, setAgentSaving] = useState(false);
+  const [agentStatus, setAgentStatus] = useState({ ok: true, msg: "" });
+
   const sectionRefs = useRef<Record<Section, HTMLElement | null>>({
     profile: null,
     organization: null,
+    agent: null,
     security: null,
   });
 
@@ -158,6 +167,15 @@ export default function SettingsPage() {
           setOrg(d.org);
           setOrgDisplayName(d.org.display_name ?? "");
           setOrgNotes(d.org.notes ?? "");
+        })
+        .catch(console.error);
+
+      backendGet<{ ok: boolean; agent_mode: AgentMode; bank_transfer_details: string | null }>("/api/settings/agent")
+        .then((d) => {
+          if (d.ok) {
+            setAgentMode(d.agent_mode || "kb_only");
+            setBankTransferDetails(d.bank_transfer_details || "");
+          }
         })
         .catch(console.error);
     }
@@ -229,6 +247,23 @@ export default function SettingsPage() {
     }
   }
 
+  async function saveAgent(e: React.FormEvent) {
+    e.preventDefault();
+    setAgentSaving(true);
+    setAgentStatus({ ok: true, msg: "" });
+    try {
+      await backendPatch("/api/settings/agent", {
+        agent_mode: agentMode,
+        bank_transfer_details: bankTransferDetails || null,
+      });
+      setAgentStatus({ ok: true, msg: "Saved successfully." });
+    } catch (err: unknown) {
+      setAgentStatus({ ok: false, msg: err instanceof Error ? err.message : "Error" });
+    } finally {
+      setAgentSaving(false);
+    }
+  }
+
   async function handleSignOut() {
     await supabaseClient.auth.signOut();
     router.push("/login");
@@ -242,6 +277,7 @@ export default function SettingsPage() {
   const navItems: { id: Section; label: string; adminOnly?: boolean }[] = [
     { id: "profile", label: "Profile" },
     { id: "organization", label: "Organization", adminOnly: true },
+    { id: "agent", label: "AI Agent", adminOnly: true },
     { id: "security", label: "Security" },
   ];
 
@@ -391,6 +427,57 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-3 pt-1">
                       <SaveButton loading={orgSaving} />
                       <StatusBadge {...orgStatus} />
+                    </div>
+                  </form>
+                </Card>
+              </section>
+            )}
+
+            {/* ─ AI Agent (admin only) ─ */}
+            {role === "admin" && (
+              <section
+                ref={(el) => { sectionRefs.current.agent = el; }}
+                onFocus={() => setActiveSection("agent")}
+              >
+                <Card>
+                  <h2 className="mb-1 text-lg font-semibold">AI Agent</h2>
+                  <p className="mb-5 text-sm text-slate-500 dark:text-slate-400">
+                    Configure how the AI bot handles customer messages.
+                  </p>
+
+                  <form onSubmit={(e) => void saveAgent(e)} className="space-y-4">
+                    <Field
+                      label="Agent Mode"
+                      hint="KB Only: answers from knowledge base. Ordering Agent: handles book browsing, cart, and orders via WhatsApp."
+                    >
+                      <select
+                        className={inputCls}
+                        value={agentMode}
+                        onChange={(e) => setAgentMode(e.target.value as AgentMode)}
+                      >
+                        <option value="kb_only">KB Only (Knowledge Base)</option>
+                        <option value="ordering_agent">Ordering Agent (Bookstore)</option>
+                      </select>
+                    </Field>
+
+                    {agentMode === "ordering_agent" && (
+                      <Field
+                        label="Bank Transfer Details"
+                        hint="These details are shared with customers when they confirm an order. Include bank name, account number, and account holder name."
+                      >
+                        <textarea
+                          className={`${inputCls} resize-none`}
+                          rows={4}
+                          value={bankTransferDetails}
+                          onChange={(e) => setBankTransferDetails(e.target.value)}
+                          placeholder={"Bank: ABC Bank\nAccount Number: 1234567890\nAccount Name: My Bookstore\nBranch: Main Branch"}
+                        />
+                      </Field>
+                    )}
+
+                    <div className="flex items-center gap-3 pt-1">
+                      <SaveButton loading={agentSaving} />
+                      <StatusBadge {...agentStatus} />
                     </div>
                   </form>
                 </Card>

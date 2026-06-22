@@ -130,3 +130,10 @@ export async function backendPatch<T>(
   return authFetch(path, { method: "PATCH", body, orgId: waAccountId });
 }
 
+export async function backendDelete<T>(
+  path: string,
+  waAccountId?: string | null
+): Promise<T> {
+  return authFetch(path, { method: "DELETE", orgId: waAccountId });
+}
+

@@ -5,10 +5,12 @@ const fs = require('fs');
 const path = require('path');
 const { supabaseAdmin } = require('../auth/supabase');
 const { saveIncomingMessage, saveOutgoingMessage } = require('./messageStore');
-const { 
-    updateWhatsAppStatus, 
-    getFirstWhatsAppAccount 
+const {
+    updateWhatsAppStatus,
+    getFirstWhatsAppAccount
 } = require('./whatsappAccountService');
+const { runAgent } = require('../agentGemini');
+const orderService = require('./orderService');
 
 /**
  * WhatsApp Service
@@ -562,6 +564,20 @@ class WhatsAppService {
                 return;
             }
 
+            // Check if this org uses the ordering agent
+            if (this.orgId) {
+                const { data: orgConfig } = await supabaseAdmin
+                    .from('organizations')
+                    .select('agent_mode')
+                    .eq('id', this.orgId)
+                    .single();
+
+                if (orgConfig?.agent_mode === 'ordering_agent') {
+                    await this.handleAgentMessage(msg, text, contactPhone, contactName);
+                    return;
+                }
+            }
+
             // Simple health-check command
             if (text.toLowerCase() === 'ping') {
                 const reply = 'pong 🏓 (Gemini AI is online)';
@@ -665,6 +681,117 @@ class WhatsAppService {
      * @param {string} text - Message text
      * @returns {Promise<object>} Saved message object
      */
+    async handleAgentMessage(msg, text, contactPhone, contactName) {
+        const aiStartTime = Date.now();
+        try {
+            const contactId = await orderService.getContactIdByPhone(this.orgId, contactPhone);
+            if (!contactId) {
+                console.warn('⚠️ Agent: contact not found for', contactPhone);
+                await msg.reply("Sorry, something went wrong. Please try again.");
+                return;
+            }
+
+            const conversationId = await orderService.getConversationByContact(this.orgId, contactId);
+
+            // Handle media — check if it's a payment receipt
+            if (msg.hasMedia && (msg.type === 'image' || msg.type === 'document')) {
+                const pendingOrder = await orderService.getPendingPaymentOrder(this.orgId, contactId);
+                if (pendingOrder) {
+                    try {
+                        const media = await msg.downloadMedia();
+                        await orderService.submitReceipt({
+                            orderId: pendingOrder.id,
+                            messageId: null,
+                            waMessageId: msg.id._serialized,
+                            mediaType: msg.type,
+                            mediaMimeType: media?.mimetype || 'application/octet-stream',
+                            mediaData: media?.data ? Buffer.from(media.data, 'base64') : null,
+                        });
+
+                        const reply = `Thank you! We've received your payment receipt for order #${pendingOrder.order_number}. Our team will verify it shortly and confirm your order.`;
+                        const sentMsg = await msg.reply(reply);
+                        if (sentMsg) this.recentlySentMsgIds.add(sentMsg.id._serialized);
+
+                        saveOutgoingMessage({
+                            orgId: this.orgId,
+                            waAccountId: this.waAccountId || this.orgId,
+                            contactPhone,
+                            body: reply,
+                            aiUsed: false,
+                            rawMessage: null,
+                        }).catch(err => console.error('❌ Failed to save receipt response:', err));
+
+                        return;
+                    } catch (err) {
+                        console.error('❌ Failed to process receipt:', err);
+                    }
+                }
+            }
+
+            // Build conversation history from DB
+            const { data: recentMessages } = await supabaseAdmin
+                .from('messages')
+                .select('direction, body, sender_type')
+                .eq('conversation_id', conversationId)
+                .order('created_at', { ascending: true })
+                .limit(20);
+
+            const conversationHistory = (recentMessages || [])
+                .filter(m => m.body)
+                .map(m => ({
+                    role: m.direction === 'inbound' ? 'user' : 'model',
+                    parts: [{ text: m.body }],
+                }));
+
+            // Run the agent
+            const agentReply = await runAgent({
+                conversationHistory,
+                userMessage: text,
+                toolContext: {
+                    orgId: this.orgId,
+                    contactId,
+                    conversationId,
+                },
+            });
+
+            const aiEndTime = Date.now();
+            const totalAiLatency = aiEndTime - aiStartTime;
+
+            const sentMsg = await msg.reply(agentReply);
+
+            if (this.orgId && this.waAccountId) {
+                if (sentMsg) this.recentlySentMsgIds.add(sentMsg.id._serialized);
+                saveOutgoingMessage({
+                    orgId: this.orgId,
+                    waAccountId: this.waAccountId || this.orgId,
+                    contactPhone,
+                    body: agentReply,
+                    aiUsed: true,
+                    aiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest',
+                    aiLatencyMs: totalAiLatency,
+                    rawMessage: null,
+                }).catch(err => console.error('❌ Failed to save agent response:', err));
+            }
+
+        } catch (err) {
+            console.error('❌ Error in handleAgentMessage:', err);
+            try {
+                const errorReply = "Sorry, something went wrong. Please try again.";
+                const sentMsg = await msg.reply(errorReply);
+                if (sentMsg) this.recentlySentMsgIds.add(sentMsg.id._serialized);
+
+                saveOutgoingMessage({
+                    orgId: this.orgId,
+                    waAccountId: this.waAccountId || this.orgId,
+                    contactPhone,
+                    body: errorReply,
+                    aiUsed: false,
+                    rawMessage: null,
+                }).catch(e => console.error('❌ Failed to save error response:', e));
+            } catch (_) { }
+        }
+    }
+
     async sendManualMessage(orgId, conversationId, text) {
         if (!this.client) {
             throw new Error('WhatsApp client is not ready');
