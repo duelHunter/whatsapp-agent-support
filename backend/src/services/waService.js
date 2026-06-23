@@ -600,9 +600,18 @@ class WhatsAppService {
                 return;
             }
 
-            // Generate AI reply using Gemini
+            // Generate AI reply using Groq
             const kbSearchStart = Date.now();
-            const kbMatches = await this.searchKB(text, { topK: 3 });
+            const kbMatches = await this.searchKB(text, { topK: 3, orgId: this.orgId });
+
+            console.log(`🔍 KB matches for "${text}":`);
+            if (kbMatches.length === 0) {
+                console.log('   (no matches found)');
+            } else {
+                kbMatches.forEach((m, i) => {
+                    console.log(`   ${i + 1}. [score: ${m.score?.toFixed(3)}] "${m.title}" — ${m.text?.substring(0, 100)}...`);
+                });
+            }
             
             const aiGenerateStart = Date.now();
             const aiReply = await this.generateAIReply({

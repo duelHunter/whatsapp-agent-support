@@ -1,21 +1,22 @@
 // backend/src/gemini.js
 
 require('dotenv').config();
-const fetch = require('node-fetch');
+const Groq = require('groq-sdk');
 const { InferenceClient } = require('@huggingface/inference');
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash-latest";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 const HF_EMBED_MODEL = process.env.HF_EMBED_MODEL || "BAAI/bge-base-en-v1.5";
+
+const groq = process.env.GROQ_API_KEY ? new Groq({ apiKey: process.env.GROQ_API_KEY }) : null;
 const hfClient = process.env.HF_API_TOKEN ? new InferenceClient(process.env.HF_API_TOKEN) : null;
 
-if (!GEMINI_API_KEY) {
-  console.error("❌ Missing GEMINI_API_KEY in .env");
+if (!groq) {
+  console.error("❌ Missing GROQ_API_KEY in .env");
   process.exit(1);
 }
 
 /**
- * Call Gemini to generate a natural language reply using KB snippets.
+ * Generate a natural language reply using KB snippets via Groq (Llama 3.3 70B).
  */
 async function generateAIReply({
   userMessage,
@@ -34,34 +35,17 @@ async function generateAIReply({
       ? `Use these knowledge base snippets when relevant:\n\n${kbContext}\n\nUser question:\n${userMessage}`
       : `No knowledge base snippets were retrieved.\n\nUser question:\n${userMessage}`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemInstruction }],
-          },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: userPrompt }],
-            },
-          ],
-        }),
-      }
-    );
+    const completion = await groq.chat.completions.create({
+      model: GROQ_MODEL,
+      messages: [
+        { role: "system", content: systemInstruction },
+        { role: "user", content: userPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 1024,
+    });
 
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("❌ Gemini Text Error:", data);
-      return "AI Error: Unable to generate response.";
-    }
-
-    const output =
-      data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join(" ").trim() ||
+    const output = completion.choices?.[0]?.message?.content?.trim() ||
       "I'm not sure, could you rephrase?";
 
     return output;
