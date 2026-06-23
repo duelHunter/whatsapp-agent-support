@@ -2,10 +2,12 @@
 
 require('dotenv').config();
 const fetch = require('node-fetch');
+const { InferenceClient } = require('@huggingface/inference');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-1.5-flash-latest";
-const GEMINI_EMBED_MODEL = process.env.GEMINI_EMBED_MODEL || "text-embedding-004";
+const HF_EMBED_MODEL = process.env.HF_EMBED_MODEL || "BAAI/bge-base-en-v1.5";
+const hfClient = process.env.HF_API_TOKEN ? new InferenceClient(process.env.HF_API_TOKEN) : null;
 
 if (!GEMINI_API_KEY) {
   console.error("❌ Missing GEMINI_API_KEY in .env");
@@ -70,31 +72,30 @@ async function generateAIReply({
 }
 
 /**
- * Create embeddings using Gemini "text-embedding-004".
+ * Create embeddings using Hugging Face Inference SDK (BAAI/bge-base-en-v1.5).
  */
 async function embedText(text) {
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBED_MODEL}:embedContent?key=${GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content: {
-            parts: [{ text }]
-          }
-        })
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.error("❌ Gemini Embedding Error:", data);
+    if (!hfClient) {
+      console.error("❌ Missing HF_API_TOKEN in .env");
       return [];
     }
 
-    return data?.embedding?.values || [];
+    const output = await hfClient.featureExtraction({
+      model: HF_EMBED_MODEL,
+      inputs: text,
+      provider: "hf-inference",
+    });
+
+    if (Array.isArray(output) && typeof output[0] === 'number') {
+      return output;
+    }
+    if (Array.isArray(output) && Array.isArray(output[0])) {
+      return output[0];
+    }
+
+    console.error("❌ Unexpected HF embedding response format:", typeof output);
+    return [];
 
   } catch (err) {
     console.error("❌ embedText Error:", err);

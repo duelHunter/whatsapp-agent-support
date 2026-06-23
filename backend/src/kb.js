@@ -32,22 +32,13 @@ function chunkText(text, maxLen = 800) {
  * @param {string} originalFilename - Original filename if from file upload (optional)
  * @returns {Promise<number>} Number of chunks added
  */
-async function addTextToKB(title, text, waAccountId, orgId = null, createdBy = null, sourceType = 'text', originalFilename = null) {
+async function addTextToKB(title, text, orgId, createdBy = null, sourceType = 'text', originalFilename = null) {
     if (!supabaseAdmin) {
         throw new Error('Supabase admin client not configured');
     }
 
-    // Get org_id from wa_account_id if not provided
-    if (!orgId && waAccountId) {
-        const account = await getWhatsAppAccountById(waAccountId);
-        if (!account) {
-            throw new Error(`WhatsApp account not found: ${waAccountId}`);
-        }
-        orgId = account.org_id;
-    }
-
     if (!orgId) {
-        throw new Error('org_id is required. Provide it directly or ensure wa_account_id is valid.');
+        throw new Error('org_id is required.');
     }
 
     const chunks = chunkText(text);
@@ -58,7 +49,6 @@ async function addTextToKB(title, text, waAccountId, orgId = null, createdBy = n
         .from('kb_sources')
         .insert({
             org_id: orgId,
-            wa_account_id: waAccountId || null,
             title,
             source_type: sourceType,
             original_filename: originalFilename || null,

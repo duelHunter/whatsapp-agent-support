@@ -18,7 +18,6 @@ RETURNS TABLE (
   text text,
   chunk_index integer,
   title text,
-  wa_account_id uuid,
   similarity float,
   metadata jsonb
 )
@@ -31,27 +30,21 @@ BEGIN
     c.text,
     c.chunk_index,
     s.title,
-    s.wa_account_id,
-    1 - (c.embedding <=> query_embedding) AS similarity,  -- Cosine distance (<=>) converted to similarity
+    1 - (c.embedding <=> query_embedding) AS similarity,
     c.metadata
   FROM kb_chunks c
   INNER JOIN kb_sources s ON c.source_id = s.id
   WHERE
     s.status = 'ready'
     AND (filter_org_id IS NULL OR s.org_id = filter_org_id)
-    AND (filter_wa_account_id IS NULL OR s.wa_account_id = filter_wa_account_id)
     AND (1 - (c.embedding <=> query_embedding)) >= match_threshold
-  ORDER BY c.embedding <=> query_embedding  -- Order by cosine distance (ascending = most similar)
+  ORDER BY c.embedding <=> query_embedding
   LIMIT match_count;
 END;
 $$;
 
 -- Create an index on the embedding column for faster vector searches
 -- This is important for performance with large knowledge bases
-CREATE INDEX IF NOT EXISTS kb_chunks_embedding_idx ON kb_chunks 
-USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);  -- Adjust 'lists' based on your data size (rule of thumb: lists = rows / 1000)
-
--- Note: The ivfflat index requires at least some data to be present.
--- If you get an error, insert a few chunks first, then create the index.
-
+-- HNSW index supports up to 4096 dimensions (IVFFlat max is 2000)
+CREATE INDEX IF NOT EXISTS kb_chunks_embedding_idx ON kb_chunks
+USING hnsw (embedding vector_cosine_ops);

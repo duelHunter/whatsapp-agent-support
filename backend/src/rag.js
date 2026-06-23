@@ -67,16 +67,10 @@ async function searchKB(query, { topK = 3, waAccountId = null, orgId = null } = 
       });
 
     if (!rpcError && rpcResults && Array.isArray(rpcResults)) {
-      // Filter by wa_account_id if needed (RPC might not filter correctly)
-      const filtered = waAccountId
-        ? rpcResults.filter(r => r.wa_account_id === waAccountId)
-        : rpcResults;
-      
-      return filtered.slice(0, topK).map(r => ({
+      return rpcResults.slice(0, topK).map(r => ({
         id: r.id,
         text: r.text,
         title: r.title || 'Unknown',
-        wa_account_id: r.wa_account_id || null,
         score: r.similarity || r.score || 0,
         chunk_index: r.chunk_index,
         metadata: r.metadata || {},
@@ -97,18 +91,12 @@ async function searchKB(query, { topK = 3, waAccountId = null, orgId = null } = 
         kb_sources!inner (
           id,
           title,
-          wa_account_id,
           org_id
         )
       `)
       .eq('kb_sources.org_id', orgId)
       .eq('kb_sources.status', 'ready')
-      .limit(500); // Limit to prevent memory issues with large KBs
-
-    // Filter by wa_account_id if provided
-    if (waAccountId) {
-      queryBuilder = queryBuilder.eq('kb_sources.wa_account_id', waAccountId);
-    }
+      .limit(500);
 
     const { data: chunks, error } = await queryBuilder;
 
@@ -144,7 +132,6 @@ async function searchKB(query, { topK = 3, waAccountId = null, orgId = null } = 
           id: chunk.id,
           text: chunk.text,
           title: chunk.kb_sources?.title || 'Unknown',
-          wa_account_id: chunk.kb_sources?.wa_account_id || null,
           score,
           chunk_index: chunk.chunk_index,
           metadata: chunk.metadata || {},
