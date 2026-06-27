@@ -15,6 +15,7 @@ const {
 const bookService = require('./services/bookService');
 const orderService = require('./services/orderService');
 const { supabaseAdmin } = require('./auth/supabase');
+const { runAgent } = require('./agent');
 
 const express = require('express');
 const dotenv = require('dotenv');
@@ -975,6 +976,58 @@ app.get('/api/settings/agent', requireAuth, async (req, res) => {
         res.json({ ok: true, ...data });
     } catch (err) {
         console.error('Error in GET /api/settings/agent:', err);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ==================== CHAT TESTER ROUTE ====================
+
+app.post('/api/chat-test', requireAuth, async (req, res) => {
+    try {
+        const orgId = req.headers['x-org-id'] || req.body?.orgId;
+        const { message, history } = req.body;
+
+        if (!message) {
+            return res.status(400).json({ ok: false, error: 'message is required' });
+        }
+
+        const { data: orgConfig } = await supabaseAdmin
+            .from('organizations')
+            .select('agent_mode')
+            .eq('id', orgId)
+            .single();
+
+        if (orgConfig?.agent_mode === 'ordering_agent') {
+            const result = await runAgent({
+                conversationHistory: history || [],
+                userMessage: message,
+                toolContext: { orgId, contactId: null, conversationId: null },
+                returnToolLogs: true,
+            });
+            return res.json({
+                ok: true,
+                mode: 'ordering_agent',
+                reply: result.reply,
+                toolLogs: result.toolLogs,
+            });
+        }
+
+        // KB-only mode
+        const kbMatches = await searchKB(message, { topK: 3, orgId });
+        const reply = await generateAIReply({ userMessage: message, kbMatches });
+        return res.json({
+            ok: true,
+            mode: 'kb_only',
+            reply,
+            kbMatches: kbMatches.map(m => ({
+                title: m.title,
+                score: m.score,
+                text: m.text?.substring(0, 200),
+            })),
+            toolLogs: [],
+        });
+    } catch (err) {
+        console.error('Error in POST /api/chat-test:', err);
         res.status(500).json({ ok: false, error: err.message });
     }
 });

@@ -234,10 +234,13 @@ async function executeTool(name, args, ctx) {
     }
 }
 
-async function runAgent({ conversationHistory, userMessage, toolContext }) {
+async function runAgent({ conversationHistory, userMessage, toolContext, returnToolLogs = false }) {
     if (!groq) {
-        return "AI Error: Groq API key not configured.";
+        const errMsg = "AI Error: Groq API key not configured.";
+        return returnToolLogs ? { reply: errMsg, toolLogs: [] } : errMsg;
     }
+
+    const toolLogs = [];
 
     // Build messages array from conversation history
     const messages = [
@@ -286,7 +289,8 @@ async function runAgent({ conversationHistory, userMessage, toolContext }) {
 
         // If no tool calls, we have the final response
         if (!responseMessage.tool_calls || responseMessage.tool_calls.length === 0) {
-            return responseMessage.content?.trim() || "I'm sorry, I couldn't process that request. Please try again.";
+            const reply = responseMessage.content?.trim() || "I'm sorry, I couldn't process that request. Please try again.";
+            return returnToolLogs ? { reply, toolLogs } : reply;
         }
 
         // Process tool calls
@@ -304,6 +308,8 @@ async function runAgent({ conversationHistory, userMessage, toolContext }) {
             }
 
             const result = await executeTool(name, args, toolContext);
+
+            toolLogs.push({ tool: name, args, result });
 
             messages.push({
                 role: 'tool',
@@ -325,7 +331,8 @@ async function runAgent({ conversationHistory, userMessage, toolContext }) {
         max_tokens: 1024,
     });
 
-    return finalCompletion.choices?.[0]?.message?.content?.trim() || "I'm sorry, I couldn't process that request. Please try again.";
+    const reply = finalCompletion.choices?.[0]?.message?.content?.trim() || "I'm sorry, I couldn't process that request. Please try again.";
+    return returnToolLogs ? { reply, toolLogs } : reply;
 }
 
 module.exports = { runAgent };
