@@ -9,7 +9,7 @@ const {
     updateWhatsAppStatus,
     getFirstWhatsAppAccount
 } = require('./whatsappAccountService');
-const { runAgent } = require('../agentGemini');
+const { runAgent } = require('../agent');
 const orderService = require('./orderService');
 
 /**
@@ -634,7 +634,7 @@ class WhatsAppService {
                     contactPhone: contactPhone,
                     body: aiReply,
                     aiUsed: true,
-                    aiModel: 'gemini-2.0-flash-exp', // Update this if you change models
+                    aiModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
                     aiLatencyMs: totalAiLatency,
                     rawMessage: null,
                 }).catch(error => {
@@ -748,8 +748,8 @@ class WhatsAppService {
             const conversationHistory = (recentMessages || [])
                 .filter(m => m.body)
                 .map(m => ({
-                    role: m.direction === 'inbound' ? 'user' : 'model',
-                    parts: [{ text: m.body }],
+                    role: m.direction === 'inbound' ? 'user' : 'assistant',
+                    content: m.body,
                 }));
 
             // Run the agent
@@ -776,7 +776,7 @@ class WhatsAppService {
                     contactPhone,
                     body: agentReply,
                     aiUsed: true,
-                    aiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash-latest',
+                    aiModel: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
                     aiLatencyMs: totalAiLatency,
                     rawMessage: null,
                 }).catch(err => console.error('❌ Failed to save agent response:', err));

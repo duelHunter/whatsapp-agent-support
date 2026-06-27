@@ -169,6 +169,8 @@ const tools = [
 ];
 
 async function executeTool(name, args, ctx) {
+    console.log(`🔧 Tool called: ${name}`, JSON.stringify(args));
+    const startTime = Date.now();
     try {
         switch (name) {
             case 'search_books':
@@ -227,6 +229,8 @@ async function executeTool(name, args, ctx) {
     } catch (err) {
         console.error(`❌ Agent tool error (${name}):`, err);
         return { error: err.message || 'An error occurred while processing your request.' };
+    } finally {
+        console.log(`   ⏱️ ${name} completed in ${Date.now() - startTime}ms`);
     }
 }
 
@@ -240,12 +244,10 @@ async function runAgent({ conversationHistory, userMessage, toolContext }) {
         { role: 'system', content: AGENT_SYSTEM_PROMPT },
     ];
 
-    // Add conversation history (convert from Gemini format to OpenAI format)
+    // Add conversation history (already in OpenAI format)
     for (const msg of (conversationHistory || [])) {
-        const role = msg.role === 'model' ? 'assistant' : 'user';
-        const text = msg.parts?.[0]?.text || '';
-        if (text) {
-            messages.push({ role, content: text });
+        if (msg.content) {
+            messages.push({ role: msg.role, content: msg.content });
         }
     }
 
@@ -253,16 +255,28 @@ async function runAgent({ conversationHistory, userMessage, toolContext }) {
     messages.push({ role: 'user', content: userMessage });
 
     let iterations = 0;
+    let retries = 0;
+    const MAX_RETRIES = 2;
 
     while (iterations < MAX_TOOL_ITERATIONS) {
-        const completion = await groq.chat.completions.create({
-            model: GROQ_MODEL,
-            messages,
-            tools,
-            tool_choice: 'auto',
-            temperature: 0.7,
-            max_tokens: 1024,
-        });
+        let completion;
+        try {
+            completion = await groq.chat.completions.create({
+                model: GROQ_MODEL,
+                messages,
+                tools,
+                tool_choice: 'auto',
+                temperature: 0.7,
+                max_tokens: 1024,
+            });
+        } catch (err) {
+            if (err.status === 400 && err.error?.error?.code === 'tool_use_failed' && retries < MAX_RETRIES) {
+                retries++;
+                console.warn(`⚠️ Groq tool_use_failed, retry ${retries}/${MAX_RETRIES}`);
+                continue;
+            }
+            throw err;
+        }
 
         const choice = completion.choices?.[0];
         if (!choice) break;
@@ -277,6 +291,7 @@ async function runAgent({ conversationHistory, userMessage, toolContext }) {
 
         // Process tool calls
         iterations++;
+        retries = 0;
         console.log(`🔧 Agent tool call iteration ${iterations}:`, responseMessage.tool_calls.map(tc => tc.function.name));
 
         for (const toolCall of responseMessage.tool_calls) {

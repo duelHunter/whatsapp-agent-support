@@ -1,4 +1,4 @@
-const { embedText } = require('./gemini');
+const { embedText } = require('./ai');
 const { supabaseAdmin } = require('./auth/supabase');
 const { getWhatsAppAccountById } = require('./services/whatsappAccountService');
 

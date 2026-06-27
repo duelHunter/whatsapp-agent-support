@@ -1,6 +1,6 @@
 const { addTextToKB } = require('./kb');
 const { searchKB } = require('./rag');
-const { generateAIReply } = require('./gemini');
+const { generateAIReply } = require('./ai');
 const requireAuth = require('./middleware/requireAuth');
 const requireRole = require('./middleware/requireRole');
 const { initSocket, setWaState, getWaState } = require('./services/socketService');

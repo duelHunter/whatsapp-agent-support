@@ -1,4 +1,4 @@
-// backend/src/gemini.js
+// backend/src/ai.js
 
 require('dotenv').config();
 const Groq = require('groq-sdk');
