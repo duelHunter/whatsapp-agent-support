@@ -11,6 +11,8 @@ Connects to a real WhatsApp account and automatically handles customer conversat
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20pgvector-3ECF8E?logo=supabase&logoColor=white)
 ![whatsapp-web.js](https://img.shields.io/badge/whatsapp--web.js-1.34-25D366?logo=whatsapp&logoColor=white)
 
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/dilshans)
+
 </div>
 
 ---
