@@ -164,4 +164,4 @@ No license file is currently included in this repository — all rights reserved
 
 *If you like what I do, maybe consider buying me a coffee ☕*
 
-[![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=☕&slug=dilshans&button_colour=FF6154&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00)](https://buymeacoffee.com/dilshans)
+[![Buy Me A Coffee](https://img.shields.io/badge/_Buy_me_a_coffee-FF6154?style=for-the-badge&logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/dilshans)
