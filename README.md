@@ -11,8 +11,6 @@ Connects to a real WhatsApp account and automatically handles customer conversat
 ![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20pgvector-3ECF8E?logo=supabase&logoColor=white)
 ![whatsapp-web.js](https://img.shields.io/badge/whatsapp--web.js-1.34-25D366?logo=whatsapp&logoColor=white)
 
-[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-support-FFDD00?logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/dilshans)
-
 </div>
 
 ---
@@ -161,3 +159,9 @@ Prints the parsed fields (amount, reference, date, bank name, confidence) plus t
 ## License
 
 No license file is currently included in this repository — all rights reserved by default until one is added.
+
+## Donation
+
+*If you like what I do, maybe consider buying me a coffee ☕*
+
+[![Buy Me A Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=☕&slug=dilshans&button_colour=FF6154&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00)](https://buymeacoffee.com/dilshans)
